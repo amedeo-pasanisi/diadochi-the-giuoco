@@ -52,6 +52,16 @@ export interface GhostUnit {
   valid: boolean;
 }
 
+export interface SceneLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+  width: number;
+  dash?: number[];
+}
+
 export interface FieldScene {
   def: BattlefieldDef;
   cam: Camera;
@@ -62,6 +72,8 @@ export interface FieldScene {
   selected?: Set<number>;
   generalSelected?: boolean;
   ghosts?: GhostUnit[];
+  /** World-space overlay lines (order arrows, projections). */
+  lines?: SceneLine[];
   /** Screen-space selection box, if dragging one. */
   selectBox?: { x0: number; y0: number; x1: number; y1: number };
 }
@@ -97,6 +109,19 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: FieldScene): voi
       ctx.strokeStyle = z.player === 0 ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.55)";
       ctx.lineWidth = 12;
       ctx.strokeRect(z.zone.x0, z.zone.y0, z.zone.x1 - z.zone.x0, z.zone.y1 - z.zone.y0);
+    }
+  }
+
+  if (scene.lines) {
+    for (const l of scene.lines) {
+      ctx.strokeStyle = l.color;
+      ctx.lineWidth = l.width;
+      ctx.setLineDash(l.dash ?? []);
+      ctx.beginPath();
+      ctx.moveTo(l.x1, l.y1);
+      ctx.lineTo(l.x2, l.y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 

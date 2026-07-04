@@ -6,10 +6,12 @@ import { armySelectScreen } from "./ui/screens/armySelect";
 import { groundScreen } from "./ui/screens/contest";
 import { walkoverScreen } from "./ui/screens/walkover";
 import { deployScreen } from "./ui/screens/deploy";
-import { battleStubScreen } from "./ui/screens/battleStub";
+import { battleScreen } from "./ui/screens/battle";
+import { resultScreen } from "./ui/screens/result";
 import type { SelectionState } from "./engine/recruitment";
 import { BATTLEFIELDS, battlefieldContest, type BattlefieldId } from "./engine/battlefield";
 import type { DeploymentState } from "./engine/deployment";
+import { createBattle } from "./engine/battle/state";
 import { randomSeed, Rng } from "./engine/rng";
 
 /**
@@ -93,7 +95,12 @@ function runDeployment(match: Match): void {
 
   phase(0, () =>
     phase(1, () => {
-      showScreen(battleStubScreen(def, [deployments[0]!, deployments[1]!], showTitle));
+      const battle = createBattle(def, match.armies, [deployments[0]!, deployments[1]!]);
+      showScreen(
+        battleScreen(battle, match.rng, (finalState) => {
+          showScreen(resultScreen(finalState, startMatch));
+        }),
+      );
     }),
   );
 }

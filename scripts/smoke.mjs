@@ -132,10 +132,44 @@ await page.waitForTimeout(400);
 await page.screenshot({ path: `${outDir}/9-deploy-p2.png` });
 await page.click("text=Alalai!");
 
-// both lines drawn
-await page.waitForSelector("text=The lines are drawn");
-await page.waitForTimeout(500);
-await page.screenshot({ path: `${outDir}/10-lines-drawn.png` });
+// ---- battle: turn 1 ----
+await page.waitForSelector("text=Command Phase");
+await page.click("text=Ready");
+await page.waitForTimeout(300);
+
+// select one P1 unit (moved earlier to 4500,4600) and march it north
+let [ux, uy] = await worldToScreen(4500, 4600);
+await page.mouse.click(ux, uy);
+await page.waitForTimeout(150);
+let [mx, my] = await worldToScreen(4300, 3200);
+await page.mouse.click(mx, my, { button: "right" });
+await page.waitForTimeout(200);
+await page.screenshot({ path: `${outDir}/11-battle-orders.png` });
+
+await page.click("text=Send Messengers");
+await page.click("text=Ready"); // P2 command
+await page.click("text=Send Messengers");
+await page.click("text=Ready"); // P1 glance
+await page.click("text=Shout Orders");
+await page.click("text=Ready"); // P2 glance
+await page.click("text=Shout Orders");
+
+// battle phase playback
+await page.waitForSelector("text=The Battle Phase");
+await page.click("text=Ready");
+await page.waitForTimeout(2000);
+await page.screenshot({ path: `${outDir}/12-battle-playback.png` });
+await page.waitForSelector("text=the field speaks", { timeout: 15000 });
+await page.screenshot({ path: `${outDir}/13-battle-events.png` });
+await page.click("text=Continue");
+
+// turn 2: P1 sounds the retreat
+await page.waitForSelector("text=Command Phase");
+await page.click("text=Ready");
+await page.click("text=Sound Retreat");
+await page.click('.field-popup button:has-text("Retreat")');
+await page.waitForSelector("text=Victory — Player 2");
+await page.screenshot({ path: `${outDir}/14-result.png` });
 
 console.log("ERRORS:", errors.length ? errors.join("\n") : "none");
 await browser.close();
