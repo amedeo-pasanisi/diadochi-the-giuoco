@@ -863,6 +863,56 @@ body {
   cursor: default;
 }
 
+.field-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.deploy-hint {
+  color: var(--gold);
+  min-height: 15px;
+}
+
+/* info overlays pinned over the field canvas */
+.field-panel {
+  position: static;
+  pointer-events: none;
+  max-width: 250px;
+  font-size: 12px;
+}
+
+.field-panel-tl {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  opacity: 0.94;
+}
+
+.field-panel-bl {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  opacity: 0.96;
+}
+
+.field-unit-card {
+  width: 132px;
+  height: 150px;
+  cursor: default;
+  flex: none;
+}
+
+.field-unit-card:hover {
+  transform: none;
+  outline-color: var(--terra-deep);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
+}
+
 /* ---------- 3D rolling dice ---------- */
 
 .die3d-wrap {

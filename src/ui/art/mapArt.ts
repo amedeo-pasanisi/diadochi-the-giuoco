@@ -279,10 +279,13 @@ export function renderMapSVG(def: BattlefieldDef, opts: MapRenderOpts = {}): str
   for (const r of geom.rivers) layers.push(riverSVG(r));
 
   if (opts.camps !== false) {
-    for (const camp of [CAMPS.north, CAMPS.south]) {
-      layers.push(`<polygon points="${argeadStarPoints(camp.x, camp.y, 240)}" fill="#8a3d1e" fill-opacity="0.92"/>`);
-      layers.push(`<circle cx="${camp.x}" cy="${camp.y}" r="34" fill="#8a3d1e"/>`);
-    }
+    // §3.2 — Player 1 (white) camps south, Player 2 (black) north
+    const south = CAMPS.south;
+    const north = CAMPS.north;
+    layers.push(`<polygon points="${argeadStarPoints(south.x, south.y, 240)}"
+      fill="#f2ecde" fill-opacity="0.95" stroke="#3a3128" stroke-width="10"/>`);
+    layers.push(`<polygon points="${argeadStarPoints(north.x, north.y, 240)}"
+      fill="#16100a" fill-opacity="0.95" stroke="#caa06a" stroke-width="10"/>`);
   }
 
   if (opts.scaleBar !== false) {

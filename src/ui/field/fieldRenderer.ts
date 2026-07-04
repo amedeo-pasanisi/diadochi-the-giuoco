@@ -106,7 +106,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: FieldScene): voi
   if (scene.ghosts) {
     for (const g of scene.ghosts) drawGhost(ctx, g);
   }
-  for (const g of scene.generals) drawGeneral(ctx, g, scene.generalSelected === true);
+  for (const g of scene.generals) drawGeneral(ctx, g, scene.generalSelected === true, scene.units);
 
   ctx.restore();
 
@@ -136,23 +136,23 @@ function drawUnit(ctx: CanvasRenderingContext2D, u: FieldUnit, selected: boolean
   const edge = u.player === 0 ? P1_EDGE : P2_EDGE;
   const ink = u.player === 0 ? P1_EDGE : P2_EDGE;
 
+  const rectPath = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(...c.tl);
+    ctx.lineTo(...c.tr);
+    ctx.lineTo(...c.br);
+    ctx.lineTo(...c.bl);
+    ctx.closePath();
+  };
+
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(...c.tl);
-  ctx.lineTo(...c.tr);
-  ctx.lineTo(...c.br);
-  ctx.lineTo(...c.bl);
-  ctx.closePath();
 
   if (g.special) {
-    // §3.3 special units: four ogival "()" shapes in an invisible rect
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 8;
-    ctx.setLineDash(g.light ? [22, 16] : []);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // §3.3 special units: four ogives in an INVISIBLE rectangle —
+    // no border unless selected
     drawOgives(ctx, u, ink);
   } else {
+    rectPath();
     ctx.fillStyle = fill;
     ctx.fill();
     if (g.cavalry) {
@@ -168,14 +168,16 @@ function drawUnit(ctx: CanvasRenderingContext2D, u: FieldUnit, selected: boolean
       ctx.fill();
       ctx.restore();
     }
-    ctx.strokeStyle = selected ? SELECT : edge;
-    ctx.lineWidth = selected ? 12 : 7;
+    rectPath();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 7;
     ctx.setLineDash(g.light ? [22, 16] : []);
     ctx.stroke();
     ctx.setLineDash([]);
   }
 
-  if (selected && g.special) {
+  if (selected) {
+    rectPath();
     ctx.strokeStyle = SELECT;
     ctx.lineWidth = 12;
     ctx.stroke();
@@ -316,18 +318,42 @@ function drawGhost(ctx: CanvasRenderingContext2D, g: GhostUnit): void {
 
 /* ---------- the general (§3.4) ---------- */
 
-function drawGeneral(ctx: CanvasRenderingContext2D, g: FieldGeneral, selected: boolean): void {
-  if (g.attachedTo !== null) return; // drawn by his host unit later (battle module)
+const GOLD = "#e0b25e";
+
+function drawGeneral(
+  ctx: CanvasRenderingContext2D,
+  g: FieldGeneral,
+  selected: boolean,
+  units: FieldUnit[],
+): void {
+  let x = g.x;
+  let y = g.y;
+  let radius = GENERAL_RADIUS;
+  if (g.attachedTo !== null) {
+    const host = units.find((u) => u.uid === g.attachedTo);
+    if (!host) return;
+    x = host.x;
+    y = host.y;
+    radius = GENERAL_RADIUS * 0.6; // slightly smaller star at unit centre (§3.4)
+  }
+
   ctx.save();
-  ctx.fillStyle = g.player === 0 ? P1_FILL : P2_FILL;
-  ctx.strokeStyle = selected ? SELECT : g.player === 0 ? P1_EDGE : P2_EDGE;
-  ctx.lineWidth = selected ? 10 : 6;
-  const pts = argeadStarPoints(g.x, g.y, GENERAL_RADIUS).split(" ");
+  // the gold command ring marks him out from any camp or unit marking
+  ctx.strokeStyle = selected ? SELECT : GOLD;
+  ctx.lineWidth = selected ? 10 : 7;
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 16, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = GOLD;
+  ctx.strokeStyle = g.player === 0 ? P1_EDGE : "#16100a";
+  ctx.lineWidth = 4;
+  const pts = argeadStarPoints(x, y, radius).split(" ");
   ctx.beginPath();
   pts.forEach((p, i) => {
-    const [x, y] = p.split(",").map(Number);
-    if (i === 0) ctx.moveTo(x!, y!);
-    else ctx.lineTo(x!, y!);
+    const [px, py] = p.split(",").map(Number);
+    if (i === 0) ctx.moveTo(px!, py!);
+    else ctx.lineTo(px!, py!);
   });
   ctx.closePath();
   ctx.fill();

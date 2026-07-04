@@ -69,13 +69,17 @@ export function unitZoneOk(
   return !t.sea;
 }
 
-/** Full placement check for one unit against the rest of the army. */
-export function placementOk(
+/**
+ * Per-unit placement verdicts: each moved unit must sit in its own
+ * permitted strip (a formation drag can NEVER carry a heavy outside
+ * the small rectangle) and overlap nothing.
+ */
+export function placementReport(
   def: BattlefieldDef,
   state: DeploymentState,
   moved: FieldUnit[],
-): boolean {
-  for (const m of moved) {
+): boolean[] {
+  return moved.map((m) => {
     if (!unitZoneOk(def, state.player, m)) return false;
     for (const other of state.units) {
       if (moved.some((x) => x.uid === other.uid)) continue;
@@ -84,8 +88,17 @@ export function placementOk(
     for (const sibling of moved) {
       if (sibling.uid !== m.uid && unitsOverlap(m, sibling)) return false;
     }
-  }
-  return true;
+    return true;
+  });
+}
+
+/** Full placement check — every moved unit must pass. */
+export function placementOk(
+  def: BattlefieldDef,
+  state: DeploymentState,
+  moved: FieldUnit[],
+): boolean {
+  return placementReport(def, state, moved).every(Boolean);
 }
 
 /** General stays inside the small strip (§3.6) — or in his camp (§3.4). */

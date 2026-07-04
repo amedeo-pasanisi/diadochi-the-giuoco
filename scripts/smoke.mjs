@@ -86,11 +86,40 @@ const worldToScreen = async (wx, wy) =>
 let [sx, sy] = await worldToScreen(2160, 5300);
 await page.mouse.click(sx, sy);
 await page.waitForTimeout(150);
-// move it forward into the strip (right-click a spot at y=4600)
-let [tx, ty] = await worldToScreen(2200, 4600);
+// move it aside with a plain right-click (keeps facing)
+let [tx, ty] = await worldToScreen(4500, 4600);
 await page.mouse.click(tx, ty, { button: "right" });
+await page.waitForTimeout(150);
+
+// box-select the remaining front rank (left-drag)
+let [bx0, by0] = await worldToScreen(2000, 5230);
+let [bx1, by1] = await worldToScreen(4000, 5370);
+await page.mouse.move(bx0, by0);
+await page.mouse.down();
+await page.mouse.move(bx1, by1, { steps: 6 });
+await page.mouse.up();
+await page.waitForTimeout(150);
+
+// perno line: right-drag from the pivot eastward — stretched formation
+let [px, py] = await worldToScreen(1400, 4700);
+let [qx, qy] = await worldToScreen(3900, 4700);
+await page.mouse.move(px, py);
+await page.mouse.down({ button: "right" });
+await page.mouse.move(qx, qy, { steps: 10 });
+await page.waitForTimeout(150);
+await page.screenshot({ path: `${outDir}/8-deploy-p1-ghosts.png` });
+await page.mouse.up({ button: "right" });
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${outDir}/8-deploy-p1.png` });
+
+// attach the general to the elephant on the second rank
+let [gx, gy] = await worldToScreen(3000, 5600);
+await page.mouse.click(gx, gy);
+await page.waitForTimeout(120);
+let [ex, ey] = await worldToScreen(3000, 5140);
+await page.mouse.click(ex, ey, { button: "right" });
+await page.waitForTimeout(150);
+await page.screenshot({ path: `${outDir}/8b-attach.png` });
 
 await page.click("text=Alalai!");
 await page.waitForSelector("text=Player 2");

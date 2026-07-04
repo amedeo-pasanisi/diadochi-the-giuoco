@@ -119,7 +119,7 @@ export const BATTLEFIELDS: Record<BattlefieldId, BattlefieldDef> = {
       {
         kind: "river",
         points: [
-          [900, 3060],
+          [450, 3060],
           [2200, 2950],
           [3600, 3090],
           [4600, 2980],
