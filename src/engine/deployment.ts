@@ -114,7 +114,6 @@ export function generalZoneOk(player: PlayerId, x: number, y: number): boolean {
  * just inside the small strip, facing the enemy.
  */
 export function initialDeployment(player: PlayerId, muster: SelectionState): DeploymentState {
-  const camp = player === 0 ? CAMPS.south : CAMPS.north;
   const facingAngle = player === 0 ? 0 : Math.PI;
   const zone = smallZone(player);
   const units: FieldUnit[] = [];
@@ -138,9 +137,11 @@ export function initialDeployment(player: PlayerId, muster: SelectionState): Dep
     units.push(makeFieldUnit(uid++, id, player, x, y, facingAngle));
   });
 
+  // the general takes the field beside his men, not back in the camp
+  const generalY = player === 0 ? zone.y1 - 100 : zone.y0 + 100;
   return {
     player,
     units,
-    general: { player, x: camp.x, y: camp.y, attachedTo: null },
+    general: { player, x: 1840, y: generalY, attachedTo: null },
   };
 }

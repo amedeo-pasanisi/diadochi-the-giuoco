@@ -112,12 +112,15 @@ await page.mouse.up({ button: "right" });
 await page.waitForTimeout(200);
 await page.screenshot({ path: `${outDir}/8-deploy-p1.png` });
 
-// attach the general to the elephant on the second rank
-let [gx, gy] = await worldToScreen(3000, 5600);
+// attach the general (now standing with the ranks) to the elephant
+let [gx, gy] = await worldToScreen(1840, 5300);
 await page.mouse.click(gx, gy);
 await page.waitForTimeout(120);
 let [ex, ey] = await worldToScreen(3000, 5140);
 await page.mouse.click(ex, ey, { button: "right" });
+await page.waitForSelector("text=Attach Antigonos");
+await page.screenshot({ path: `${outDir}/8b-attach-popup.png` });
+await page.click('.field-popup button:has-text("Attach")');
 await page.waitForTimeout(150);
 await page.screenshot({ path: `${outDir}/8b-attach.png` });
 

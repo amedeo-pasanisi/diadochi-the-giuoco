@@ -1,12 +1,13 @@
 import { clear, el, fromHTML } from "../dom";
 import { applyMeander } from "../art/ornaments";
 import { createTimer } from "../components/timer";
-import { generalTooltipHTML, unitTooltipHTML } from "../components/tooltip";
+import { unitTooltipHTML } from "../components/tooltip";
 import { unitArtSVG } from "../art/unitArt";
+import { coinSVG } from "../art/coinArt";
 import { alalai, dismissThud, uiClick } from "../sound";
 import { Camera } from "../field/camera";
 import { drawScene, loadMapImage, type GhostUnit } from "../field/fieldRenderer";
-import type { PlayerId } from "../../engine/types";
+import type { PlayerId, UnitDef } from "../../engine/types";
 import { UNIT_DEFS } from "../../engine/data/units";
 import { GENERAL_DEFS } from "../../engine/data/generals";
 import type { BattlefieldDef } from "../../engine/battlefield";
@@ -35,12 +36,13 @@ const MIN_GAP = 20;
 /**
  * §3 — the deployment phase.
  * Camera: wheel zoom · right-drag on empty ground pans · Q/E rotate · R reset.
- * Selection: left-click (Shift adds) · left-drag boxes.
- * Placement: right-click moves; right-DRAG plants a pivot ("perno") at
- * the click point — the front line extends from that corner along the
- * drag, dragging right pivoting the TL corner, left the TR (§3.5).
- * Formations fan out along the same line, stretching their spacing up
- * to 175 m between units; Shift preserves the current formation.
+ * Selection: left-click (Shift adds) · left-drag boxes · the general's
+ * star always wins the click over the unit he rides with.
+ * Placement: right-click moves; right-DRAG plants a pivot ("perno") —
+ * the front line runs from that corner along the drag, and the line
+ * faces the LEFT of the drag, so dragging the other way deploys units
+ * facing rearward. Formations stretch their gaps up to 175 m; Shift
+ * preserves the current formation.
  */
 export function deployScreen(
   player: PlayerId,
@@ -49,6 +51,7 @@ export function deployScreen(
   onDone: (state: DeploymentState) => void,
 ): HTMLElement {
   const state = initialDeployment(player, muster);
+  const g = GENERAL_DEFS[muster.general!];
   const cam = new Camera(800, 600);
   const selected = new Set<number>();
   let generalSelected = false;
@@ -58,7 +61,7 @@ export function deployScreen(
   type Drag =
     | { kind: "none" }
     | { kind: "box"; x0: number; y0: number; x1: number; y1: number }
-    | { kind: "place"; downW: [number, number]; downS: [number, number]; curW: [number, number]; curS: [number, number]; shift: boolean }
+    | { kind: "place"; downW: [number, number]; curW: [number, number]; shift: boolean }
     | { kind: "pan"; lastX: number; lastY: number };
   let drag: Drag = { kind: "none" };
   let ghosts: GhostUnit[] = [];
@@ -88,6 +91,9 @@ export function deployScreen(
   });
 
   const hint = el("div", { class: "player-sub deploy-hint" }, "");
+  const setHint = (t: string): void => {
+    hint.textContent = t;
+  };
 
   const header = el(
     "div",
@@ -99,28 +105,64 @@ export function deployScreen(
       el(
         "div",
         { class: "player-sub" },
-        "left-click select · left-drag box · right-click place · right-drag pivot & line · right-drag on ground pans · wheel zoom · Q/E turn",
+        "left-click select · left-drag box · right-click place · right-drag pivot & line (faces left of the drag) · right-drag ground pans · wheel zoom · Q/E turn",
       ),
       hint,
     ),
     el("div", { class: "deploy-header-right" }, timer.element, alalaiBtn),
   );
 
-  // info overlays: the general top-left, the selected unit bottom-left
-  const generalPanel = el("div", { class: "tooltip field-panel field-panel-tl" });
-  const g = GENERAL_DEFS[muster.general!];
-  generalPanel.innerHTML = generalTooltipHTML(g);
-  const unitPanelCard = el("div", { class: "unit-card field-unit-card" });
-  const unitPanelInfo = el("div", { class: "tooltip field-panel" });
-  const unitPanel = el(
-    "div",
-    { class: "field-panel-bl" },
-    unitPanelCard,
-    unitPanelInfo,
-  );
+  /* general panel (top-left): portrait, name, and the four stats */
+  const pips = (n: number): string => "●".repeat(n) + "○".repeat(Math.max(0, 3 - n));
+  const generalPanel = el("div", { class: "field-general-panel" });
+  generalPanel.innerHTML = `
+    <div class="fgp-head">
+      <div class="fgp-coin">${coinSVG(g, 62)}</div>
+      <div>
+        <div class="fgp-name">${g.name}</div>
+        <div class="fgp-epithet">${g.epithet}</div>
+      </div>
+    </div>
+    <div class="fgp-stats">
+      <span class="lbl">Command</span><span class="val">${pips(g.command)}</span>
+      <span class="lbl">Glance</span><span class="val">${pips(g.glance)}</span>
+      <span class="lbl">Brilliancy</span><span class="val">${pips(g.brilliancy)}</span>
+      <span class="lbl">Charisma</span><span class="val">${pips(g.charisma)}</span>
+    </div>`;
+
+  /* selection panel (bottom-left): card fan + fixed papyrus */
+  const cardsRow = el("div", { class: "field-cards" });
+  const infoPanel = el("div", { class: "tooltip field-panel" });
+  const unitPanel = el("div", { class: "field-panel-bl" }, cardsRow, infoPanel);
   unitPanel.style.display = "none";
 
-  const fieldWrap = el("div", { class: "field-wrap" }, canvas, generalPanel, unitPanel);
+  /* attach/detach popup */
+  const popup = el("div", { class: "papyrus-panel field-popup" });
+  popup.style.display = "none";
+  let pendingAttach: number | null = null;
+
+  function hidePopup(): void {
+    popup.style.display = "none";
+    pendingAttach = null;
+  }
+
+  function showPopup(message: string, actions: [string, () => void][]): void {
+    clear(popup);
+    popup.append(el("p", { class: "field-popup-msg" }, message));
+    const row = el("div", { class: "field-popup-actions" });
+    for (const [label, fn] of actions) {
+      const b = el("button", { class: "btn-plain" }, label);
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        fn();
+      });
+      row.append(b);
+    }
+    popup.append(row);
+    popup.style.display = "block";
+  }
+
+  const fieldWrap = el("div", { class: "field-wrap" }, canvas, generalPanel, unitPanel, popup);
 
   const root = el("div", { class: "screen deploy-screen" });
   const top = el("div", { class: "meander" });
@@ -129,36 +171,91 @@ export function deployScreen(
   applyMeander(bottom);
   root.append(top, el("div", { class: "screen-body deploy-body" }, header, fieldWrap), bottom);
 
-  function setHint(text: string): void {
-    hint.textContent = text;
+  /* ---------- info panels ---------- */
+
+  function miniCard(def2: UnitDef, title: string, count: number, foot: string): HTMLElement {
+    const card = el(
+      "div",
+      { class: "unit-card field-unit-card" },
+      el("div", { class: "unit-card-name" }, title),
+      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2))),
+      el(
+        "div",
+        { class: "unit-card-foot" },
+        el("span", {}, foot),
+        count > 1 ? el("span", { class: "unit-count-badge" }, `×${count}`) : el("span", {}, ""),
+      ),
+    );
+    return card;
+  }
+
+  function generalUnitHTML(): string {
+    const h = UNIT_DEFS.hetairoi;
+    return `
+      <h4>${g.name}</h4>
+      <div class="tt-epithet">the general's own banda — fights as ${h.name}</div>
+      <div class="tt-role">${g.role}</div>
+      <div class="tt-stats">
+        <div><b>Attack</b> ${h.attack} <span style="opacity:.75">+${h.charge} charge</span></div>
+        <div><b>Defense</b> ${h.defense} <span style="opacity:.75">+${h.formation} formation</span></div>
+        <div><b>Training</b> ${h.training}</div>
+        <div><b>Speed</b> ${h.speed}</div>
+        <div><b>Endurance</b> ${h.endurance}</div>
+        <div><b>Morale</b> ${h.morale}</div>
+      </div>
+      <div class="tt-note">Can attach to a friendly unit and ride at its centre; his own unit
+      stands down until he detaches (§3.4). Attached units roll with Advantage.</div>`;
   }
 
   function updateInfoPanels(): void {
+    clear(cardsRow);
     const sel = selectedUnits();
+
     if (generalSelected) {
-      unitPanel.style.display = "none";
+      unitPanel.style.display = "flex";
+      cardsRow.append(miniCard(UNIT_DEFS.hetairoi, g.name, 1, "elite heavy cavalry"));
+      infoPanel.innerHTML = generalUnitHTML();
       return;
     }
     if (sel.length === 0) {
       unitPanel.style.display = "none";
       return;
     }
-    const first = UNIT_DEFS[sel[0]!.unit];
-    const sameType = sel.every((u) => u.unit === first.id);
+
     unitPanel.style.display = "flex";
-    clear(unitPanelCard);
-    unitPanelCard.append(
-      el("div", { class: "unit-card-name" }, first.name),
-      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(first))),
-      el(
-        "div",
-        { class: "unit-card-foot" },
-        el("span", {}, sel.length > 1 ? `×${sel.length} selected` : first.epithet.split("—")[1]?.trim() ?? ""),
-      ),
-    );
-    unitPanelInfo.innerHTML = sameType
-      ? unitTooltipHTML(first)
-      : `<h4>${sel.length} units</h4><div class="tt-role">A mixed body: ${[...new Set(sel.map((u) => UNIT_DEFS[u.unit].name))].join(", ")}.</div>`;
+    // group by type, one card per type, fanned; hover focuses the papyrus
+    const groups = new Map<string, { def: UnitDef; count: number }>();
+    for (const u of sel) {
+      const d = UNIT_DEFS[u.unit];
+      const e = groups.get(d.id) ?? { def: d, count: 0 };
+      e.count++;
+      groups.set(d.id, e);
+    }
+    const entries = [...groups.values()];
+    const defaultHTML =
+      entries.length === 1
+        ? unitTooltipHTML(entries[0]!.def, undefined, { cost: false })
+        : `<h4>${sel.length} units</h4>
+           <div class="tt-role">A mixed body of ${entries.length} kinds. Hover a card for its profile.</div>
+           ${entries.map((e) => `<div>${e.def.name} ×${e.count}</div>`).join("")}`;
+    infoPanel.innerHTML = defaultHTML;
+
+    entries.forEach((e, i) => {
+      const card = miniCard(e.def, e.def.name, e.count, e.def.epithet.split("—")[1]?.trim() ?? "");
+      if (entries.length > 1) {
+        card.classList.add("is-fanned");
+        card.style.zIndex = String(10 + i);
+      }
+      card.addEventListener("mouseenter", () => {
+        infoPanel.innerHTML = unitTooltipHTML(e.def, undefined, { cost: false });
+        card.classList.add("is-focus");
+      });
+      card.addEventListener("mouseleave", () => {
+        infoPanel.innerHTML = defaultHTML;
+        card.classList.remove("is-focus");
+      });
+      cardsRow.append(card);
+    });
   }
 
   /* ---------- helpers ---------- */
@@ -173,7 +270,7 @@ export function deployScreen(
     return null;
   }
 
-  function generalScreenPos(): [number, number] {
+  function generalPos(): [number, number] {
     if (state.general.attachedTo !== null) {
       const host = state.units.find((u) => u.uid === state.general.attachedTo);
       if (host) return [host.x, host.y];
@@ -181,9 +278,11 @@ export function deployScreen(
     return [state.general.x, state.general.y];
   }
 
+  /** The star's click wins over the unit beneath it. */
   function generalAt(wx: number, wy: number): boolean {
-    const [gx, gy] = generalScreenPos();
-    return Math.hypot(wx - gx, wy - gy) <= GENERAL_RADIUS + 30;
+    const [gx, gy] = generalPos();
+    const r = state.general.attachedTo !== null ? 55 : GENERAL_RADIUS + 30;
+    return Math.hypot(wx - gx, wy - gy) <= r;
   }
 
   function syncAttachedGeneral(): void {
@@ -193,6 +292,31 @@ export function deployScreen(
       state.general.x = host.x;
       state.general.y = host.y;
     }
+  }
+
+  function selectGeneral(): void {
+    selected.clear();
+    generalSelected = true;
+    uiClick();
+    if (state.general.attachedTo !== null) {
+      const host = state.units.find((u) => u.uid === state.general.attachedTo);
+      const hostName = host ? UNIT_DEFS[host.unit].name : "the ranks";
+      showPopup(`${g.name} rides with the ${hostName}.`, [
+        [
+          "Detach him",
+          () => {
+            state.general.attachedTo = null;
+            uiClick();
+            hidePopup();
+            setHint(`${g.name} takes his own station — right-click ground to move him.`);
+          },
+        ],
+        ["Leave him", hidePopup],
+      ]);
+    } else {
+      setHint(`${g.name} follows your voice — right-click a unit to attach him, or ground to move him.`);
+    }
+    updateInfoPanels();
   }
 
   /* ---------- perno placement (§3.5) ---------- */
@@ -208,15 +332,12 @@ export function deployScreen(
     const [cwx, cwy] = drag.curW;
     const dragLen = Math.hypot(cwx - pwx, cwy - pwy);
     const dragging = dragLen > 60;
-    const enemyDir: [number, number] = player === 0 ? [0, -1] : [0, 1];
 
     if (!dragging) {
-      // plain right-click: move, keeping each unit's facing
       if (sel.length === 1) {
         const u = sel[0]!;
         ghostTargets.set(u.uid, { x: pwx, y: pwy, angle: u.angle });
       } else {
-        // group shift keeping relative positions
         const cx = sel.reduce((s, u) => s + u.x, 0) / sel.length;
         const cy = sel.reduce((s, u) => s + u.y, 0) / sel.length;
         for (const u of sel) {
@@ -224,22 +345,16 @@ export function deployScreen(
         }
       }
     } else {
-      // the drag defines the front line from the pivot ("perno"): the
-      // pivot is the first unit's front corner — TL when the line runs
-      // to the right of it, TR when to the left (§3.5)
+      // the drag defines the front line from the pivot ("perno"); the
+      // line faces the LEFT of the drag — drag the other way to face
+      // rearward. No auto-facing correction.
       const ex = (cwx - pwx) / dragLen;
       const ey = (cwy - pwy) / dragLen;
-      // face the perpendicular pointing toward the enemy
-      let fx = ey;
-      let fy = -ex;
-      if (fx * enemyDir[0] + fy * enemyDir[1] < -1e-9) {
-        fx = -fx;
-        fy = -fy;
-      }
+      const fx = ey;
+      const fy = -ex;
       const angle = Math.atan2(fx, -fy);
 
       if (drag.shift && sel.length > 1) {
-        // formation preserved: rotate & translate around the pivot
         const cx = sel.reduce((s, u) => s + u.x, 0) / sel.length;
         const cy = sel.reduce((s, u) => s + u.y, 0) / sel.length;
         const groupAngle = Math.atan2(
@@ -259,7 +374,6 @@ export function deployScreen(
           });
         }
       } else {
-        // line from the pivot corner, stretchable spacing
         const n = sel.length;
         let gap = MIN_GAP;
         if (n > 1) {
@@ -269,7 +383,6 @@ export function deployScreen(
           const along = 100 + i * (UNIT_W + gap);
           return { x: pwx + ex * along - fx * 50, y: pwy + ey * along - fy * 50, angle };
         });
-        // §3.5: slots are claimed by proximity
         const remaining = [...sel];
         for (const slot of slots) {
           let bestIdx = 0;
@@ -345,6 +458,11 @@ export function deployScreen(
       }
 
       if (e.button === 0) {
+        hidePopup();
+        if (generalAt(wx, wy)) {
+          selectGeneral();
+          return;
+        }
         const u = unitAt(wx, wy);
         if (u) {
           if (!e.shiftKey) selected.clear();
@@ -352,20 +470,10 @@ export function deployScreen(
           else selected.add(u.uid);
           generalSelected = false;
           uiClick();
-        } else if (generalAt(wx, wy)) {
-          selected.clear();
-          generalSelected = true;
-          uiClick();
-          setHint(
-            state.general.attachedTo === null
-              ? `${g.name} follows your voice — right-click a unit to attach him, or ground to move him.`
-              : `${g.name} rides with the ranks — right-click ground to detach him.`,
-          );
+          updateInfoPanels();
         } else {
-          // maybe a box select
           drag = { kind: "box", x0: sx, y0: sy, x1: sx, y1: sy };
         }
-        updateInfoPanels();
         return;
       }
 
@@ -373,17 +481,28 @@ export function deployScreen(
         if (generalSelected) {
           const host = unitAt(wx, wy);
           if (host) {
-            // §3.4 — attach: he takes his place at the unit's centre
-            state.general.attachedTo = host.uid;
-            syncAttachedGeneral();
-            uiClick();
-            setHint(`${g.name} attaches to the ${UNIT_DEFS[host.unit].name}. He moves as they move.`);
-          } else if (generalZoneOk(player, wx, wy)) {
-            state.general.attachedTo = null;
+            pendingAttach = host.uid;
+            showPopup(`Attach ${g.name} to the ${UNIT_DEFS[host.unit].name}?`, [
+              [
+                "Attach",
+                () => {
+                  state.general.attachedTo = pendingAttach;
+                  syncAttachedGeneral();
+                  uiClick();
+                  hidePopup();
+                  setHint(`${g.name} rides at their centre. Click his star to detach him.`);
+                },
+              ],
+              ["Cancel", hidePopup],
+            ]);
+          } else if (state.general.attachedTo === null && generalZoneOk(player, wx, wy)) {
             state.general.x = wx;
             state.general.y = wy;
             uiClick();
             setHint("");
+          } else if (state.general.attachedTo !== null) {
+            dismissThud();
+            setHint(`${g.name} rides with the ranks — click his star and detach him first.`);
           } else {
             dismissThud();
             setHint("The general must stay within the line of deployment or his camp.");
@@ -391,17 +510,9 @@ export function deployScreen(
           return;
         }
         if (selected.size > 0) {
-          drag = {
-            kind: "place",
-            downW: [wx, wy],
-            downS: [sx, sy],
-            curW: [wx, wy],
-            curS: [sx, sy],
-            shift: e.shiftKey,
-          };
+          drag = { kind: "place", downW: [wx, wy], curW: [wx, wy], shift: e.shiftKey };
           updateGhosts();
         } else {
-          // right-drag on empty ground pans the map
           drag = { kind: "pan", lastX: sx, lastY: sy };
         }
       }
@@ -424,7 +535,6 @@ export function deployScreen(
         drag.y1 = sy;
       } else if (drag.kind === "place") {
         drag.curW = cam.toWorld(sx, sy);
-        drag.curS = [sx, sy];
         drag.shift = e.shiftKey;
         updateGhosts();
       }
@@ -501,6 +611,7 @@ export function deployScreen(
         case "Escape":
           selected.clear();
           generalSelected = false;
+          hidePopup();
           updateInfoPanels();
           break;
       }

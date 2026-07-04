@@ -878,16 +878,12 @@ body {
 /* info overlays pinned over the field canvas */
 .field-panel {
   position: static;
-  pointer-events: none;
-  max-width: 250px;
+  pointer-events: auto;
+  width: 264px;
+  height: 208px;
+  overflow-y: auto;
   font-size: 12px;
-}
-
-.field-panel-tl {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  opacity: 0.94;
+  flex: none;
 }
 
 .field-panel-bl {
@@ -896,21 +892,131 @@ body {
   left: 12px;
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  opacity: 0.96;
+  gap: 12px;
+  opacity: 0.97;
+}
+
+.field-cards {
+  display: flex;
+  align-items: flex-end;
 }
 
 .field-unit-card {
-  width: 132px;
-  height: 150px;
+  width: 128px;
+  height: 208px;
   cursor: default;
   flex: none;
+  transition: transform 130ms;
 }
 
 .field-unit-card:hover {
   transform: none;
   outline-color: var(--terra-deep);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
+}
+
+.field-cards .field-unit-card.is-fanned:not(:first-child) {
+  margin-left: -74px;
+}
+
+.field-cards .field-unit-card.is-fanned:hover,
+.field-cards .field-unit-card.is-focus {
+  transform: translateY(-12px);
+  z-index: 99 !important;
+  outline-color: var(--gold);
+}
+
+/* the general's panel, top-left: portrait + the four stats */
+.field-general-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 246px;
+  background: rgba(16, 12, 9, 0.88);
+  border: 1px solid var(--terra-deep);
+  border-radius: 4px;
+  padding: 12px 14px;
+  pointer-events: none;
+}
+
+.fgp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.fgp-coin svg {
+  display: block;
+}
+
+.fgp-name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 15px;
+  color: var(--marble);
+}
+
+.fgp-epithet {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--marble-dark);
+  margin-top: 2px;
+}
+
+.fgp-stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+}
+
+.fgp-stats .lbl {
+  color: var(--terra);
+  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+}
+
+.fgp-stats .val {
+  color: var(--gold);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-align: right;
+}
+
+/* attach/detach popup */
+.field-popup {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 14px 22px;
+  max-width: 380px;
+  text-align: center;
+  z-index: 50;
+}
+
+.field-popup-msg {
+  margin-bottom: 10px;
+  font-size: 13.5px;
+}
+
+.field-popup-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.field-popup-actions .btn-plain {
+  color: var(--papyrus-ink);
+  border-color: #8a6c3c;
+}
+
+.field-popup-actions .btn-plain:hover {
+  background: #8a6c3c;
+  color: var(--papyrus);
 }
 
 /* ---------- 3D rolling dice ---------- */

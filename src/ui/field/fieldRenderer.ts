@@ -148,9 +148,9 @@ function drawUnit(ctx: CanvasRenderingContext2D, u: FieldUnit, selected: boolean
   ctx.save();
 
   if (g.special) {
-    // §3.3 special units: four ogives in an INVISIBLE rectangle —
-    // no border unless selected
-    drawOgives(ctx, u, ink);
+    // §3.3 special units: four ogives in an INVISIBLE rectangle.
+    // Selection lights the ogives themselves.
+    drawOgives(ctx, u, selected ? SELECT : ink, selected);
   } else {
     rectPath();
     ctx.fillStyle = fill;
@@ -168,19 +168,13 @@ function drawUnit(ctx: CanvasRenderingContext2D, u: FieldUnit, selected: boolean
       ctx.fill();
       ctx.restore();
     }
+    // selection lights the unit's own outline — dashed for lights
     rectPath();
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 7;
+    ctx.strokeStyle = selected ? SELECT : edge;
+    ctx.lineWidth = selected ? 11 : 7;
     ctx.setLineDash(g.light ? [22, 16] : []);
     ctx.stroke();
     ctx.setLineDash([]);
-  }
-
-  if (selected) {
-    rectPath();
-    ctx.strokeStyle = SELECT;
-    ctx.lineWidth = 12;
-    ctx.stroke();
   }
 
   // §3.3 elite: small "+" at the centre
@@ -216,10 +210,10 @@ function drawUnit(ctx: CanvasRenderingContext2D, u: FieldUnit, selected: boolean
   ctx.restore();
 }
 
-function drawOgives(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: string): void {
+function drawOgives(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: string, bold = false): void {
   const [rx, ry] = rightward(u);
   ctx.strokeStyle = ink;
-  ctx.lineWidth = 9;
+  ctx.lineWidth = bold ? 12 : 9;
   for (let i = 0; i < 4; i++) {
     const t = (i - 1.5) * 46;
     const cx = u.x + rx * t;
@@ -275,13 +269,16 @@ function drawStatusMarks(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: strin
     ctx.lineTo(x + 8, y - 9);
     ctx.stroke();
   }
-  // morale at BR: small ogives
+  // morale at BR: small ogives in red so they read at a glance
   ctx.lineWidth = 4;
+  ctx.strokeStyle = "#d24a2e";
+  ctx.fillStyle = "rgba(210,74,46,0.55)";
   for (let i = 0; i < u.morale; i++) {
     const x = c.br[0] - rx * (22 + i * 22) + fx * 22;
     const y = c.br[1] - ry * (22 + i * 22) + fy * 22;
     ctx.beginPath();
     ctx.ellipse(x, y, 6, 11, u.angle, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
   }
   ctx.restore();

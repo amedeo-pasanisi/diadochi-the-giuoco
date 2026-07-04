@@ -45,7 +45,11 @@ export function attachTooltip(target: HTMLElement, html: () => string): void {
   target.addEventListener("mouseleave", hideTooltip);
 }
 
-export function unitTooltipHTML(def: UnitDef, note?: string): string {
+export function unitTooltipHTML(
+  def: UnitDef,
+  note?: string,
+  opts: { cost?: boolean } = {},
+): string {
   const chargePart = def.charge > 0 ? ` <span style="opacity:.75">+${def.charge} charge</span>` : "";
   const formPart = ` <span style="opacity:.75">+${def.formation} formation</span>`;
   const rangedRow = def.ranged
@@ -79,7 +83,13 @@ export function unitTooltipHTML(def: UnitDef, note?: string): string {
       ${rangedRow}
     </div>
     ${specials.length ? `<div class="tt-note">${specials.join("<br>")}</div>` : ""}
-    <div class="tt-cost">Cost ${def.cost} talents · up to ${unitCap(def.id)} units${note ? `<br>${note}` : ""}</div>
+    ${
+      opts.cost === false
+        ? note
+          ? `<div class="tt-cost">${note}</div>`
+          : ""
+        : `<div class="tt-cost">Cost ${def.cost} talents · up to ${unitCap(def.id)} units${note ? `<br>${note}` : ""}</div>`
+    }
   `;
 }
 
