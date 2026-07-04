@@ -829,6 +829,40 @@ body {
   display: block;
 }
 
+/* ---------- deployment field ---------- */
+
+.deploy-body {
+  padding: 12px 18px 14px;
+  gap: 10px;
+}
+
+.deploy-header {
+  margin-bottom: 8px;
+}
+
+.deploy-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.field-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--ink-line);
+  border-radius: 3px;
+  cursor: crosshair;
+  background: var(--ink-soft);
+}
+
+.stub-canvas {
+  flex: none;
+  width: min(60vh, 560px);
+  height: min(60vh, 560px);
+  cursor: default;
+}
+
 /* ---------- 3D rolling dice ---------- */
 
 .die3d-wrap {

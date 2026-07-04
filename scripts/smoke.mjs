@@ -64,9 +64,46 @@ await page.click(".battlefield-card >> nth=1");
 await page.screenshot({ path: `${outDir}/7-battlefields.png` });
 await page.click("text=Deploy Army");
 
-// Milestone III stub
-await page.waitForSelector("text=The armies march for Chaironeia");
-await page.screenshot({ path: `${outDir}/8-deploy-stub.png` });
+// P1 deployment
+await page.waitForSelector("text=Player 1");
+await page.click("text=I am Player 1");
+await page.waitForSelector("canvas.field-canvas");
+await page.waitForTimeout(600); // map bitmap rasterizes
+
+// compute screen coords of a world point via the fitted camera
+const worldToScreen = async (wx, wy) =>
+  await page.evaluate(
+    ([wx, wy]) => {
+      const c = document.querySelector("canvas.field-canvas");
+      const r = c.getBoundingClientRect();
+      const scale = (Math.min(r.width, r.height) / 6000) * 0.96;
+      return [r.left + r.width / 2 + (wx - 3000) * scale, r.top + r.height / 2 + (wy - 3000) * scale];
+    },
+    [wx, wy],
+  );
+
+// P1's first rank sits at y=5300 around x=2160.. — select one unit
+let [sx, sy] = await worldToScreen(2160, 5300);
+await page.mouse.click(sx, sy);
+await page.waitForTimeout(150);
+// move it forward into the strip (right-click a spot at y=4600)
+let [tx, ty] = await worldToScreen(2200, 4600);
+await page.mouse.click(tx, ty, { button: "right" });
+await page.waitForTimeout(200);
+await page.screenshot({ path: `${outDir}/8-deploy-p1.png` });
+
+await page.click("text=Alalai!");
+await page.waitForSelector("text=Player 2");
+await page.click("text=I am Player 2");
+await page.waitForSelector("canvas.field-canvas");
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${outDir}/9-deploy-p2.png` });
+await page.click("text=Alalai!");
+
+// both lines drawn
+await page.waitForSelector("text=The lines are drawn");
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${outDir}/10-lines-drawn.png` });
 
 console.log("ERRORS:", errors.length ? errors.join("\n") : "none");
 await browser.close();

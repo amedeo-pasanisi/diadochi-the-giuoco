@@ -5,9 +5,11 @@ import { handoffScreen } from "./ui/screens/handoff";
 import { armySelectScreen } from "./ui/screens/armySelect";
 import { groundScreen } from "./ui/screens/contest";
 import { walkoverScreen } from "./ui/screens/walkover";
-import { deployStubScreen } from "./ui/screens/deployStub";
+import { deployScreen } from "./ui/screens/deploy";
+import { battleStubScreen } from "./ui/screens/battleStub";
 import type { SelectionState } from "./engine/recruitment";
-import { battlefieldContest, type BattlefieldId } from "./engine/battlefield";
+import { BATTLEFIELDS, battlefieldContest, type BattlefieldId } from "./engine/battlefield";
+import type { DeploymentState } from "./engine/deployment";
 import { randomSeed, Rng } from "./engine/rng";
 
 /**
@@ -67,7 +69,31 @@ function runContest(match: Match): void {
   showScreen(
     groundScreen(match.armies, result, (id) => {
       match.battlefield = id;
-      showScreen(deployStubScreen(id, showTitle));
+      runDeployment(match);
+    }),
+  );
+}
+
+function runDeployment(match: Match): void {
+  const def = BATTLEFIELDS[match.battlefield!];
+  const deployments: [DeploymentState | null, DeploymentState | null] = [null, null];
+
+  const phase = (player: 0 | 1, next: () => void): void => {
+    showScreen(
+      handoffScreen(player, "Deploy your army. Your rival must look away.", () => {
+        showScreen(
+          deployScreen(player, def, match.armies[player], (d) => {
+            deployments[player] = d;
+            next();
+          }),
+        );
+      }),
+    );
+  };
+
+  phase(0, () =>
+    phase(1, () => {
+      showScreen(battleStubScreen(def, [deployments[0]!, deployments[1]!], showTitle));
     }),
   );
 }
