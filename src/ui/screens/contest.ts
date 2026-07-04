@@ -1,18 +1,17 @@
 import { el, fromHTML } from "../dom";
 import { applyMeander } from "../art/ornaments";
 import { coinSVG } from "../art/coinArt";
-import { createTimer } from "../components/timer";
 import { diceRattle, uiClick } from "../sound";
 import { battlefieldChoicePanel } from "./battlefieldSelect";
 import type { BattlefieldId, ContestResult } from "../../engine/battlefield";
 import type { SelectionState } from "../../engine/recruitment";
 import { GENERAL_DEFS } from "../../engine/data/generals";
 
-/** How long the verdict lingers before the screen advances by itself. */
-const CONTEST_SECONDS = 15;
 /** Dice flight time; totals/verdict reveal after the last die settles. */
 const ROLL_MS = 1600;
 const STAGGER_MS = 260;
+/** How long the verdict lingers before the screen glides on by itself. */
+const LINGER_MS = 3800;
 
 /**
  * §2.1 — "The Choice of Ground", now a single self-advancing screen:
@@ -91,8 +90,6 @@ export function groundScreen(
     el("p", { class: "contest-hint" }, `${winner.general} rides out to survey the ground…`),
   );
 
-  const timer = createTimer(CONTEST_SECONDS, () => advance(), { presentational: true });
-
   const phaseA = el(
     "div",
     { class: "ground-phase contest-stage" },
@@ -109,7 +106,6 @@ export function groundScreen(
           "the better of command and brilliancy, plus the throw of a die",
         ),
       ),
-      timer.element,
     ),
     el("div", { class: "center-stage", style: "gap:22px" }, cols, verdict),
   );
@@ -125,7 +121,6 @@ export function groundScreen(
   const advance = (): void => {
     if (advanced) return;
     advanced = true;
-    timer.stop();
     phaseA.classList.add("phase-exit");
     window.setTimeout(() => {
       phaseA.remove();
@@ -152,6 +147,8 @@ export function groundScreen(
       revealed = true;
       screen.querySelectorAll(".reveal-late").forEach((n) => n.classList.add("is-revealed"));
       screen.querySelector(".will-win")?.classList.add("is-winner");
+      // linger on the verdict, then glide into the battlefield choice
+      window.setTimeout(advance, LINGER_MS);
     }, ROLL_MS + STAGGER_MS + 150);
   }, 350);
 

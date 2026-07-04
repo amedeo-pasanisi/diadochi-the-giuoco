@@ -184,7 +184,14 @@ export function geometryOf(def: BattlefieldDef): BattlefieldGeometry {
     if (base <= 0) return 0;
     // ruggedness: contour wiggle on the slopes, fading out at the plain
     const n = fbm(noiseSeed, x * 0.00105, y * 0.00105, 3);
-    return Math.max(0, base + (n - 0.5) * 0.95 * Math.min(1, base));
+    let h = Math.max(0, base + (n - 0.5) * 0.95 * Math.min(1, base));
+    // rivers carve their valleys: ground sinks toward any riverbed, so
+    // water never runs uphill — it always sits in a notch of its own
+    for (const r of rivers) {
+      const d = distToPolyline(x, y, r.points);
+      if (d < 550) h *= 0.12 + 0.88 * (d / 550);
+    }
+    return h;
   };
 
   const geom: BattlefieldGeometry = { seed, rivers, woods, heightAt, maxLevel };

@@ -127,9 +127,11 @@ export const BATTLEFIELDS: Record<BattlefieldId, BattlefieldDef> = {
         ],
         width: 80,
       },
-      { kind: "hill", cx: 5550, cy: 1200, rx: 1550, ry: 1450, levels: 3 },
-      { kind: "hill", cx: 5700, cy: 3200, rx: 1650, ry: 1600, levels: 4 },
-      { kind: "hill", cx: 5500, cy: 5000, rx: 1500, ry: 1350, levels: 3 },
+      // two masses with a gap at the river's latitude: the Pinarus
+      // descends through the notch between them to the sea
+      { kind: "hill", cx: 5550, cy: 1050, rx: 1550, ry: 1500, levels: 3 },
+      { kind: "hill", cx: 5650, cy: 4650, rx: 1600, ry: 1700, levels: 4 },
+      { kind: "hill", cx: 5850, cy: 2900, rx: 700, ry: 500, levels: 1 },
       { kind: "woods", cx: 4250, cy: 4550, rx: 330, ry: 420 },
       { kind: "woods", cx: 4150, cy: 1450, rx: 300, ry: 380 },
       { kind: "woods", cx: 5000, cy: 850, rx: 420, ry: 480 },
