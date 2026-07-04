@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>art preview</title>
+    <style>
+      body {
+        background: #0d0a07;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+        padding: 18px;
+        margin: 0;
+      }
+      .c {
+        background: linear-gradient(180deg, #b45f2c, #9c4d22);
+        border: 2px solid #16100a;
+        border-radius: 3px;
+      }
+      .c h5 {
+        color: #16100a;
+        font: 13px Georgia;
+        text-align: center;
+        margin: 4px 0 0;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .c svg {
+        width: 100%;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="/src/preview.ts"></script>
+  </body>
+</html>

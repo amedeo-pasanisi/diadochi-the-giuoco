@@ -1,5 +1,6 @@
 import { el, fromHTML } from "../dom";
 import { applyMeander, laurelSVG } from "../art/ornaments";
+import { marchHorn } from "../sound";
 
 export function titleScreen(onStart: () => void): HTMLElement {
   const top = el("div", { class: "meander" });
@@ -11,7 +12,10 @@ export function titleScreen(onStart: () => void): HTMLElement {
   title.style.fontSize = "52px";
 
   const start = el("button", { class: "btn-marble" }, "March to War");
-  start.addEventListener("click", onStart);
+  start.addEventListener("click", () => {
+    marchHorn();
+    onStart();
+  });
 
   const body = el(
     "div",

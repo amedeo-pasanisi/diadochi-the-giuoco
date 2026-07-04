@@ -1,4 +1,5 @@
 import { el } from "../dom";
+import { ENFORCE_TIMERS } from "../../config";
 
 export interface PhaseTimer {
   element: HTMLElement;
@@ -7,7 +8,8 @@ export interface PhaseTimer {
 
 /**
  * Countdown pill (§1.9 etc.). Calls `onExpire` exactly once, unless
- * stopped first. Turns urgent below 30 seconds.
+ * stopped first. Turns urgent below 30 seconds. While ENFORCE_TIMERS
+ * is off (development), expiry just dims the pill and does nothing.
  */
 export function createTimer(seconds: number, onExpire: () => void): PhaseTimer {
   const label = el("span", {}, format(seconds));
@@ -29,7 +31,13 @@ export function createTimer(seconds: number, onExpire: () => void): PhaseTimer {
     if (left <= 0 && !done) {
       done = true;
       window.clearInterval(handle);
-      onExpire();
+      if (ENFORCE_TIMERS) {
+        onExpire();
+      } else {
+        pill.classList.remove("is-urgent");
+        pill.classList.add("is-expired");
+        pill.title = "Timers are lenient during development (config.ts → ENFORCE_TIMERS)";
+      }
       return;
     }
   };

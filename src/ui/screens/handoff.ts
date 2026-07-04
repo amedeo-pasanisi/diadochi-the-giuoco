@@ -1,5 +1,6 @@
 import { el } from "../dom";
 import { applyMeander } from "../art/ornaments";
+import { uiClick } from "../sound";
 import type { PlayerId } from "../../engine/types";
 
 /**
@@ -17,7 +18,10 @@ export function handoffScreen(
   applyMeander(bottom);
 
   const ready = el("button", { class: "btn-marble" }, `I am Player ${player + 1}`);
-  ready.addEventListener("click", onReady);
+  ready.addEventListener("click", () => {
+    uiClick();
+    onReady();
+  });
 
   const body = el(
     "div",

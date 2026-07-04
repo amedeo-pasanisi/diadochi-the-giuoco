@@ -29,9 +29,8 @@ for (let i = 0; i < 6; i++) await cards.nth(0).click();
 for (let i = 0; i < 2; i++) await cards.nth(7).click();
 await cards.nth(13).click();
 
-// Cycle general to Antigonos and appoint him
+// Cycle general to Antigonos — the shown general is auto-appointed
 await page.click(".coin-arrow >> nth=1"); // next arrow
-await page.click(".coin-wrap");
 
 // Hover a card to show the tooltip
 await page.hover(".unit-card >> nth=14");

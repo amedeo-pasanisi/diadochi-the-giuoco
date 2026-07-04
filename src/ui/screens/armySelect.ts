@@ -3,12 +3,8 @@ import { applyMeander } from "../art/ornaments";
 import { unitArtSVG } from "../art/unitArt";
 import { coinSVG } from "../art/coinArt";
 import { createTimer } from "../components/timer";
-import {
-  attachTooltip,
-  generalTooltipHTML,
-  hideTooltip,
-  unitTooltipHTML,
-} from "../components/tooltip";
+import { attachTooltip, hideTooltip, unitTooltipHTML } from "../components/tooltip";
+import { coinClink, denyKnock, dismissThud, marchHorn, uiClick } from "../sound";
 import type { PlayerId } from "../../engine/types";
 import { UNIT_DEFS, UNIT_ORDER } from "../../engine/data/units";
 import { GENERAL_DEFS, GENERAL_ORDER } from "../../engine/data/generals";
@@ -39,13 +35,17 @@ export interface ArmySelectResult {
 /**
  * Army selection screen (§1). One instance per player; the hotseat
  * flow shows a handoff curtain in between.
+ *
+ * The general shown on the coin IS the appointed general — cycling the
+ * carousel re-appoints and the treasury updates automatically. If the
+ * displayed general is beyond the player's remaining purse, no general
+ * is appointed until troops are dismissed or the carousel moves on.
  */
 export function armySelectScreen(
   player: PlayerId,
   onDone: (result: ArmySelectResult) => void,
 ): HTMLElement {
   let sel = emptySelection();
-  // Which general the coin carousel is showing (browsing ≠ appointing).
   let shownGeneral = 0;
   let finished = false;
 
@@ -118,7 +118,12 @@ export function armySelectScreen(
       card.addEventListener("click", () => {
         const before = sel;
         sel = applySelectionAction(sel, { type: "addUnit", unit: id });
-        if (sel !== before) refresh();
+        if (sel !== before) {
+          coinClink();
+          refresh();
+        } else {
+          denyKnock();
+        }
       });
 
       rosterGrid.appendChild(card);
@@ -139,7 +144,7 @@ export function armySelectScreen(
   function renderMuster(): void {
     clear(musterList);
     const chosen = UNIT_ORDER.filter((id) => unitCount(sel, id) > 0);
-    if (chosen.length === 0 && !sel.general) {
+    if (chosen.length === 0) {
       musterList.appendChild(
         el("div", { class: "muster-empty" }, "No troops mustered. The campfires stay cold."),
       );
@@ -159,21 +164,7 @@ export function armySelectScreen(
       attachTooltip(row, () => unitTooltipHTML(def, "Click to dismiss one unit."));
       row.addEventListener("click", () => {
         sel = applySelectionAction(sel, { type: "removeUnit", unit: id });
-        refresh();
-      });
-      musterList.appendChild(row);
-    }
-    if (sel.general) {
-      const g = GENERAL_DEFS[sel.general];
-      const row = el(
-        "div",
-        { class: "muster-row" },
-        el("div", { class: "muster-name" }, `⚑ ${g.name}, commanding`),
-        el("div", { class: "muster-cost" }, `${g.cost} ᴛ`),
-      );
-      attachTooltip(row, () => generalTooltipHTML(g));
-      row.addEventListener("click", () => {
-        sel = applySelectionAction(sel, { type: "setGeneral", general: null });
+        dismissThud();
         refresh();
       });
       musterList.appendChild(row);
@@ -189,9 +180,10 @@ export function armySelectScreen(
 
   /* ---------- command column (right): general, budget, march ---------- */
 
-  const coinWrap = el("div", { class: "coin-wrap" });
+  const coinWrap = el("div", { class: "coin-wrap is-static" });
   const captionName = el("div", { class: "g-name" }, "");
   const captionState = el("div", { class: "g-state" }, "");
+  const generalInfo = el("div", { class: "general-info" });
   const budgetPill = el("div", { class: "hud-pill" });
   const marchHint = el("div", { class: "march-hint" }, "");
   const marchBtn = el("button", { class: "btn-marble" }, "March to Battle") as HTMLButtonElement;
@@ -200,22 +192,28 @@ export function armySelectScreen(
   const nextBtn = el("button", { class: "coin-arrow", title: "Next general" }, "›");
   prevBtn.addEventListener("click", () => {
     shownGeneral = (shownGeneral + GENERAL_ORDER.length - 1) % GENERAL_ORDER.length;
+    uiClick();
     refresh();
   });
   nextBtn.addEventListener("click", () => {
     shownGeneral = (shownGeneral + 1) % GENERAL_ORDER.length;
+    uiClick();
     refresh();
   });
 
-  coinWrap.addEventListener("click", () => {
+  /** The displayed general is the appointed one, purse permitting. */
+  function reconcileGeneral(): void {
     const id = GENERAL_ORDER[shownGeneral]!;
-    sel = applySelectionAction(sel, {
-      type: "setGeneral",
-      general: sel.general === id ? null : id,
-    });
-    refresh();
-  });
-  attachTooltip(coinWrap, () => generalTooltipHTML(GENERAL_DEFS[GENERAL_ORDER[shownGeneral]!]));
+    if (canSetGeneral(sel, id)) {
+      if (sel.general !== id) sel = applySelectionAction(sel, { type: "setGeneral", general: id });
+    } else if (sel.general !== null) {
+      sel = applySelectionAction(sel, { type: "setGeneral", general: null });
+    }
+  }
+
+  function pips(n: number): string {
+    return "●".repeat(n) + "○".repeat(Math.max(0, 3 - n));
+  }
 
   function renderGeneral(): void {
     const id = GENERAL_ORDER[shownGeneral]!;
@@ -223,16 +221,37 @@ export function armySelectScreen(
     clear(coinWrap);
     coinWrap.appendChild(fromHTML(coinSVG(g)));
     coinWrap.classList.toggle("is-chosen", sel.general === id);
-    coinWrap.classList.toggle("is-unaffordable", !canSetGeneral(sel, id));
+    coinWrap.classList.toggle("is-unaffordable", sel.general !== id);
     captionName.textContent = g.name;
     if (sel.general === id) {
-      captionState.textContent = "Commanding — click to dismiss";
+      captionState.textContent = `Commanding · ${g.cost} talents`;
       captionState.className = "g-state is-chosen";
     } else {
-      captionState.textContent = canSetGeneral(sel, id)
-        ? `${g.cost} talents — click to appoint`
-        : `${g.cost} talents — beyond your purse`;
+      captionState.textContent = `${g.cost} talents — beyond your purse`;
       captionState.className = "g-state";
+    }
+
+    clear(generalInfo);
+    generalInfo.append(
+      el("div", { class: "g-epithet" }, g.epithet),
+      el("div", { class: "g-role" }, g.role),
+      el(
+        "div",
+        { class: "g-stat-grid" },
+        el("span", { class: "lbl" }, "Command"),
+        el("span", { class: "val" }, pips(g.command)),
+        el("span", { class: "lbl" }, "Glance"),
+        el("span", { class: "val" }, pips(g.glance)),
+        el("span", { class: "lbl" }, "Brilliancy"),
+        el("span", { class: "val" }, pips(g.brilliancy)),
+        el("span", { class: "lbl" }, "Charisma"),
+        el("span", { class: "val" }, pips(g.charisma) + (g.duelCharisma ? " *" : "")),
+      ),
+    );
+    if (g.duelCharisma) {
+      generalInfo.append(
+        el("div", { class: "g-footnote" }, `* counts as ${g.duelCharisma} in a duel`),
+      );
     }
   }
 
@@ -245,18 +264,20 @@ export function armySelectScreen(
   }
 
   function renderMarch(): void {
+    const g = GENERAL_DEFS[GENERAL_ORDER[shownGeneral]!];
     const ready = armySize(sel) > 0 && sel.general !== null;
     marchBtn.disabled = !ready;
     marchHint.textContent =
       armySize(sel) === 0
         ? "Recruit at least one unit."
         : sel.general === null
-          ? "Appoint a general — click his coin."
+          ? `Your purse cannot pay ${g.name} — dismiss troops or turn the coin.`
           : `${totalSpent(sel)} talents committed. The men await your word.`;
   }
 
   marchBtn.addEventListener("click", () => {
     if (marchBtn.disabled) return;
+    marchHorn();
     finish({ selection: sel });
   });
 
@@ -266,11 +287,13 @@ export function armySelectScreen(
     el("div", { class: "title-section" }, "General Selection"),
     el("div", { class: "general-box" }, prevBtn, coinWrap, nextBtn),
     el("div", { class: "general-caption" }, captionName, captionState),
+    generalInfo,
     el("div", { style: "flex:1" }),
     el("div", { class: "pane-footer" }, budgetPill, marchHint, marchBtn),
   );
 
   function refresh(): void {
+    reconcileGeneral();
     renderRoster();
     renderMuster();
     renderGeneral();

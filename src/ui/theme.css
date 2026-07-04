@@ -335,17 +335,11 @@ body {
 
 .coin-wrap {
   position: relative;
-  cursor: pointer;
   border-radius: 50%;
-  transition: transform 120ms;
-}
-
-.coin-wrap:hover {
-  transform: scale(1.03);
 }
 
 .coin-wrap.is-chosen {
-  box-shadow: 0 0 0 3px var(--gold), 0 0 28px rgba(224, 178, 94, 0.45);
+  box-shadow: 0 0 24px rgba(224, 178, 94, 0.28);
 }
 
 .coin-wrap.is-unaffordable {
@@ -381,6 +375,61 @@ body {
   color: var(--gold);
 }
 
+/* inline description + stats under the coin */
+.general-info {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  font-size: 13px;
+}
+
+.general-info .g-epithet {
+  font-style: italic;
+  text-align: center;
+  color: var(--marble-dark);
+  font-size: 12.5px;
+}
+
+.general-info .g-role {
+  color: var(--papyrus);
+  line-height: 1.55;
+  font-size: 13px;
+  border-top: 1px solid var(--ink-line);
+  border-bottom: 1px solid var(--ink-line);
+  padding: 10px 2px;
+}
+
+.g-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  padding: 0 4px;
+}
+
+.g-stat-grid .lbl {
+  color: var(--terra);
+  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+.g-stat-grid .val {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-align: right;
+}
+
+.general-info .g-footnote {
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--marble-dark);
+  text-align: right;
+  padding-right: 4px;
+}
+
 /* ---------- HUD: budget + timer ---------- */
 
 .hud-pill {
@@ -411,6 +460,11 @@ body {
 
 @keyframes pulse {
   50% { opacity: 0.55; }
+}
+
+.timer-pill.is-expired {
+  opacity: 0.4;
+  animation: none;
 }
 
 /* ---------- tooltip (papyrus, §6) ---------- */
