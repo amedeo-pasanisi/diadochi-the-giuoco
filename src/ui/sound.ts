@@ -66,6 +66,19 @@ export function marchHorn(): void {
   tone(466, 0.45, 0.035, { type: "sawtooth", glideTo: 370, delay: 0.02 });
 }
 
+/** Knucklebones on marble — the contest die (§2.1). */
+export function diceRattle(): void {
+  for (const [f, d] of [
+    [1050, 0],
+    [780, 0.07],
+    [1180, 0.13],
+    [640, 0.2],
+  ] as const) {
+    tone(f, 0.045, 0.07, { type: "square", delay: d });
+  }
+  tone(300, 0.16, 0.09, { type: "triangle", glideTo: 180, delay: 0.27 });
+}
+
 /** War cry for the deployment "Alalai!" button (§3.7) — used in Milestone III. */
 export function alalai(): void {
   // massed-voices approximation: detuned saws swelling then cut off

@@ -42,5 +42,27 @@ await page.click("text=March to Battle");
 await page.waitForSelector("text=Player 2");
 await page.screenshot({ path: `${outDir}/5-handoff-p2.png` });
 
+// Player 2 quick muster: 3 Hoplitai, 2 Prodromoi, keep Seleukos
+await page.click("text=I am Player 2");
+await page.waitForSelector("text=Unit Roster");
+for (let i = 0; i < 3; i++) await cards.nth(1).click();
+for (let i = 0; i < 2; i++) await cards.nth(9).click();
+await page.click("text=March to Battle");
+
+// Contest screen
+await page.waitForSelector("text=The Choice of Ground");
+await page.screenshot({ path: `${outDir}/6-contest.png` });
+
+// Continue to battlefield selection, pick Chaironeia
+await page.click(".center-stage .btn-marble");
+await page.waitForSelector("text=Choose the battlefield");
+await page.click(".battlefield-card >> nth=1");
+await page.screenshot({ path: `${outDir}/7-battlefields.png` });
+await page.click("text=Deploy Army");
+
+// Milestone III stub
+await page.waitForSelector("text=The armies march for Chaironeia");
+await page.screenshot({ path: `${outDir}/8-deploy-stub.png` });
+
 console.log("ERRORS:", errors.length ? errors.join("\n") : "none");
 await browser.close();

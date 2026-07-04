@@ -49,24 +49,29 @@ export function laurelSVG(width = 300, color = "#c06a34"): string {
 </svg>`;
 }
 
-/** Sixteen-pointed Argead star (camps, generals on the map — §2.2, §3.4). */
-export function argeadStarSVG(size: number, color = "#c06a34"): string {
-  const c = size / 2;
+/** Point list for a sixteen-pointed Argead star centred on (cx,cy). */
+export function argeadStarPoints(cx: number, cy: number, radius: number): string {
   const points: string[] = [];
-  const outer = size * 0.48;
-  const mid = size * 0.2;
+  const outer = radius;
+  const mid = radius * 0.42;
   for (let i = 0; i < 32; i++) {
     const r = i % 2 === 0 ? outer : mid;
-    // alternate long/short rays: even rays full length, odd rays shorter
+    // alternate long/short rays: every other ray slightly shorter
     const rayScale = i % 4 === 0 ? 1 : i % 2 === 0 ? 0.72 : 1;
     const a = (i * Math.PI) / 16 - Math.PI / 2;
     points.push(
-      `${(c + Math.cos(a) * r * rayScale).toFixed(2)},${(c + Math.sin(a) * r * rayScale).toFixed(2)}`,
+      `${(cx + Math.cos(a) * r * rayScale).toFixed(2)},${(cy + Math.sin(a) * r * rayScale).toFixed(2)}`,
     );
   }
+  return points.join(" ");
+}
+
+/** Sixteen-pointed Argead star (camps, generals on the map — §2.2, §3.4). */
+export function argeadStarSVG(size: number, color = "#c06a34"): string {
+  const c = size / 2;
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <polygon points="${points.join(" ")}" fill="${color}"/>
+  <polygon points="${argeadStarPoints(c, c, size * 0.48)}" fill="${color}"/>
   <circle cx="${c}" cy="${c}" r="${size * 0.07}" fill="${color}"/>
 </svg>`;
 }
