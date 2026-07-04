@@ -49,13 +49,17 @@ for (let i = 0; i < 3; i++) await cards.nth(1).click();
 for (let i = 0; i < 2; i++) await cards.nth(9).click();
 await page.click("text=March to Battle");
 
-// Contest screen
+// Contest screen: dice tumble, then totals/verdict reveal
 await page.waitForSelector("text=The Choice of Ground");
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${outDir}/6a-dice-rolling.png` });
+await page.waitForTimeout(1900);
 await page.screenshot({ path: `${outDir}/6-contest.png` });
 
-// Continue to battlefield selection, pick Chaironeia
-await page.click(".center-stage .btn-marble");
+// Click anywhere to skip the countdown — same screen crossfades to the maps
+await page.click(".contest-stage .center-stage");
 await page.waitForSelector("text=Choose the battlefield");
+await page.waitForTimeout(650);
 await page.click(".battlefield-card >> nth=1");
 await page.screenshot({ path: `${outDir}/7-battlefields.png` });
 await page.click("text=Deploy Army");

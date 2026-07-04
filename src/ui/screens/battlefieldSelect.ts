@@ -1,5 +1,4 @@
 import { el, fromHTML } from "../dom";
-import { applyMeander } from "../art/ornaments";
 import { renderMapSVG } from "../art/mapArt";
 import { createTimer } from "../components/timer";
 import { marchHorn, uiClick } from "../sound";
@@ -12,10 +11,11 @@ import {
 import { BATTLEFIELD_SELECT_SECONDS } from "../../engine/recruitment";
 
 /**
- * §2.4 — the three battlefields on papyrus squares. The contest winner
- * clicks a map to select it, then "Deploy Army". 45-second timer.
+ * §2.4 — the three battlefields on papyrus squares. Rendered as a
+ * panel (not a full screen): the ground screen crossfades to it after
+ * the dice have decided who chooses.
  */
-export function battlefieldSelectScreen(
+export function battlefieldChoicePanel(
   chooser: PlayerId,
   onDone: (id: BattlefieldId) => void,
 ): HTMLElement {
@@ -49,7 +49,8 @@ export function battlefieldSelectScreen(
 
   const deployBtn = el("button", { class: "btn-marble" }, "Deploy Army") as HTMLButtonElement;
   deployBtn.disabled = true;
-  deployBtn.addEventListener("click", () => {
+  deployBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
     if (selected === null) return;
     marchHorn();
     finish(selected);
@@ -66,7 +67,8 @@ export function battlefieldSelectScreen(
       el("div", { class: "battlefield-map" }, fromHTML(renderMapSVG(def))),
       el("p", { class: "battlefield-blurb" }, def.blurb),
     );
-    card.addEventListener("click", () => {
+    card.addEventListener("click", (ev) => {
+      ev.stopPropagation();
       selected = id;
       uiClick();
       for (const [cid, c] of Object.entries(cards)) {
@@ -78,18 +80,6 @@ export function battlefieldSelectScreen(
     row.appendChild(card);
   }
 
-  const top = el("div", { class: "meander" });
-  const bottom = el("div", { class: "meander" });
-  applyMeander(top);
-  applyMeander(bottom);
-
   const footer = el("div", { class: "battlefield-footer" }, deployBtn);
-
-  return el(
-    "div",
-    { class: "screen" },
-    top,
-    el("div", { class: "screen-body" }, header, row, footer),
-    bottom,
-  );
+  return el("div", { class: "ground-phase ground-choice" }, header, row, footer);
 }

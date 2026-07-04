@@ -3,8 +3,7 @@ import { clear } from "./ui/dom";
 import { titleScreen } from "./ui/screens/title";
 import { handoffScreen } from "./ui/screens/handoff";
 import { armySelectScreen } from "./ui/screens/armySelect";
-import { contestScreen } from "./ui/screens/contest";
-import { battlefieldSelectScreen } from "./ui/screens/battlefieldSelect";
+import { groundScreen } from "./ui/screens/contest";
 import { walkoverScreen } from "./ui/screens/walkover";
 import { deployStubScreen } from "./ui/screens/deployStub";
 import type { SelectionState } from "./engine/recruitment";
@@ -66,13 +65,9 @@ function startMatch(): void {
 function runContest(match: Match): void {
   const result = battlefieldContest(match.armies, match.rng);
   showScreen(
-    contestScreen(match.armies, result, () => {
-      showScreen(
-        battlefieldSelectScreen(result.chooser, (id) => {
-          match.battlefield = id;
-          showScreen(deployStubScreen(id, showTitle));
-        }),
-      );
+    groundScreen(match.armies, result, (id) => {
+      match.battlefield = id;
+      showScreen(deployStubScreen(id, showTitle));
     }),
   );
 }

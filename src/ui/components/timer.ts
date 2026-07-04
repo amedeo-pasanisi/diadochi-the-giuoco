@@ -6,12 +6,22 @@ export interface PhaseTimer {
   stop(): void;
 }
 
+export interface TimerOpts {
+  /**
+   * Presentational timers pace the UI itself (e.g. the dice screen has
+   * no button, so its countdown MUST advance the flow). They fire even
+   * while ENFORCE_TIMERS is off.
+   */
+  presentational?: boolean;
+}
+
 /**
  * Countdown pill (§1.9 etc.). Calls `onExpire` exactly once, unless
  * stopped first. Turns urgent below 30 seconds. While ENFORCE_TIMERS
- * is off (development), expiry just dims the pill and does nothing.
+ * is off (development), expiry just dims the pill and does nothing —
+ * unless the timer is presentational.
  */
-export function createTimer(seconds: number, onExpire: () => void): PhaseTimer {
+export function createTimer(seconds: number, onExpire: () => void, opts: TimerOpts = {}): PhaseTimer {
   const label = el("span", {}, format(seconds));
   const pill = el(
     "div",
@@ -31,7 +41,7 @@ export function createTimer(seconds: number, onExpire: () => void): PhaseTimer {
     if (left <= 0 && !done) {
       done = true;
       window.clearInterval(handle);
-      if (ENFORCE_TIMERS) {
+      if (ENFORCE_TIMERS || opts.presentational) {
         onExpire();
       } else {
         pill.classList.remove("is-urgent");

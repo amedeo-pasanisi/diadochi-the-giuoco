@@ -2,6 +2,7 @@ import type { PlayerId } from "./types";
 import { GENERAL_DEFS } from "./data/generals";
 import { totalSpent, type SelectionState } from "./recruitment";
 import type { Rng } from "./rng";
+import { distToPolyline, geometryOf, pointInPolygon } from "./terrainGen";
 
 /* ============================================================
    §2 — Battlefields: the contest for choice of ground, and the
@@ -88,6 +89,9 @@ export const BATTLEFIELDS: Record<BattlefieldId, BattlefieldDef> = {
       { kind: "woods", cx: 1750, cy: 2050, rx: 360, ry: 500 },
       { kind: "woods", cx: 4350, cy: 4300, rx: 380, ry: 460 },
       { kind: "woods", cx: 1850, cy: 4500, rx: 300, ry: 380 },
+      { kind: "woods", cx: 950, cy: 2150, rx: 420, ry: 520 },
+      { kind: "woods", cx: 5050, cy: 1950, rx: 400, ry: 500 },
+      { kind: "woods", cx: 850, cy: 3950, rx: 380, ry: 460 },
       {
         kind: "river",
         points: [
@@ -128,36 +132,24 @@ export const BATTLEFIELDS: Record<BattlefieldId, BattlefieldDef> = {
       { kind: "hill", cx: 5500, cy: 5000, rx: 1500, ry: 1350, levels: 3 },
       { kind: "woods", cx: 4250, cy: 4550, rx: 330, ry: 420 },
       { kind: "woods", cx: 4150, cy: 1450, rx: 300, ry: 380 },
+      { kind: "woods", cx: 5000, cy: 850, rx: 420, ry: 480 },
+      { kind: "woods", cx: 5400, cy: 2250, rx: 460, ry: 560 },
+      { kind: "woods", cx: 5100, cy: 3950, rx: 430, ry: 520 },
+      { kind: "woods", cx: 5650, cy: 4850, rx: 400, ry: 470 },
+      { kind: "woods", cx: 4700, cy: 5600, rx: 360, ry: 330 },
     ],
   },
 };
 
 export const BATTLEFIELD_ORDER: BattlefieldId[] = ["gaugamela", "chaironeia", "issus"];
 
-/* ---------- terrain queries (used by the battle sim) ---------- */
-
-function insideEllipse(x: number, y: number, f: { cx: number; cy: number; rx: number; ry: number }): number {
-  const dx = (x - f.cx) / f.rx;
-  const dy = (y - f.cy) / f.ry;
-  return Math.hypot(dx, dy); // < 1 means inside; value is normalized distance
-}
-
-function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const abx = bx - ax;
-  const aby = by - ay;
-  const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / (abx * abx + aby * aby || 1)));
-  return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
-}
+/* ---------- terrain queries (used by the battle sim) ----------
+   Backed by the generated geometry in terrainGen.ts, so gameplay and
+   the rendered map always agree — meanders, blobs, ruggedness and all. */
 
 /** Elevation in 30 m levels at a point (0 = plain). */
 export function elevationLevelAt(def: BattlefieldDef, x: number, y: number): number {
-  let best = 0;
-  for (const f of def.features) {
-    if (f.kind !== "hill") continue;
-    const d = insideEllipse(x, y, f);
-    if (d < 1) best = Math.max(best, Math.ceil((1 - d) * f.levels));
-  }
-  return best;
+  return Math.max(0, Math.round(geometryOf(def).heightAt(x, y)));
 }
 
 export interface TerrainSample {
@@ -168,22 +160,24 @@ export interface TerrainSample {
 }
 
 export function terrainAt(def: BattlefieldDef, x: number, y: number): TerrainSample {
+  const geom = geometryOf(def);
   let woods = false;
   let river = false;
   let sea = false;
-  for (const f of def.features) {
-    if (f.kind === "woods" && insideEllipse(x, y, f) < 1) woods = true;
-    else if (f.kind === "sea" && x <= f.width) sea = true;
-    else if (f.kind === "river") {
-      for (let i = 0; i < f.points.length - 1; i++) {
-        const [ax, ay] = f.points[i]!;
-        const [bx, by] = f.points[i + 1]!;
-        if (distToSegment(x, y, ax, ay, bx, by) <= f.width / 2) {
-          river = true;
-          break;
-        }
-      }
+  for (const w of geom.woods) {
+    if (pointInPolygon(x, y, w.poly)) {
+      woods = true;
+      break;
     }
+  }
+  for (const r of geom.rivers) {
+    if (distToPolyline(x, y, r.points) <= r.width / 2) {
+      river = true;
+      break;
+    }
+  }
+  for (const f of def.features) {
+    if (f.kind === "sea" && x <= f.width) sea = true;
   }
   return { elevation: elevationLevelAt(def, x, y), woods, river, sea };
 }
