@@ -26,7 +26,8 @@ const P2_FILL = "rgba(24,18,13,0.94)";
 const P1_EDGE = "#3a3128";
 const P2_EDGE = "#f2ecde";
 const CAV_HALF = "rgba(150,141,128,0.9)"; // the grey half of cavalry (§3.3)
-const SELECT = "rgba(80,200,90,0.95)"; // faint green selection (§3.5)
+const SELECT = "rgba(196,92,255,0.95)"; // fluorescent violet selection
+const SELECT_FILL = "rgba(196,92,255,0.22)";
 const BAD_MARK = "#d24a2e"; // casualties, disorder, fatigue
 const MORALE_COLORS: Record<number, string> = { 3: "#3f9e4d", 2: "#e0b25e", 1: "#d24a2e" };
 
@@ -52,6 +53,8 @@ export interface GhostUnit {
   y: number;
   angle: number;
   valid: boolean;
+  /** The general's projection is a circle, like his star. */
+  circle?: boolean;
 }
 
 export interface SceneLine {
@@ -62,6 +65,16 @@ export interface SceneLine {
   color: string;
   width: number;
   dash?: number[];
+}
+
+export interface SceneFx {
+  kind: "shoot" | "clash" | "casualty" | "morale" | "disorder" | "rout";
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  /** 0..1 age of the effect; 0 = just fired, 1 = about to vanish. */
+  age: number;
 }
 
 export interface FieldScene {
@@ -76,6 +89,10 @@ export interface FieldScene {
   ghosts?: GhostUnit[];
   /** World-space overlay lines (order arrows, projections). */
   lines?: SceneLine[];
+  /** Combat effects (playback). */
+  fx?: SceneFx[];
+  /** Translucent units under the main layer (Glance-phase preview). */
+  ghostUnits?: FieldUnit[];
   /** Screen-space selection box, if dragging one. */
   selectBox?: { x0: number; y0: number; x1: number; y1: number };
 }
@@ -114,6 +131,14 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: FieldScene): voi
     }
   }
 
+  // Glance-phase translucent preview beneath the live units
+  if (scene.ghostUnits) {
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    for (const u of scene.ghostUnits) drawUnit(ctx, u, false);
+    ctx.restore();
+  }
+
   if (scene.lines) {
     for (const l of scene.lines) {
       ctx.strokeStyle = l.color;
@@ -129,6 +154,10 @@ export function drawScene(ctx: CanvasRenderingContext2D, scene: FieldScene): voi
 
   for (const u of scene.units) {
     drawUnit(ctx, u, scene.selected?.has(u.uid) === true);
+  }
+
+  if (scene.fx) {
+    for (const f of scene.fx) drawFx(ctx, f);
   }
   if (scene.ghosts) {
     for (const g of scene.ghosts) drawGhost(ctx, g);
@@ -278,17 +307,18 @@ function drawStatusMarks(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: strin
     ctx.lineTo(x + fx * 9, y + fy * 9);
     ctx.stroke();
   }
-  // disorder at TR: little "s" glyphs
-  ctx.font = "34px Georgia";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  // disorder at TR: stylized serpentine marks
   for (let i = 0; i < u.disorder; i++) {
     const x = c.tr[0] - rx * (26 + i * 22) - fx * 24;
     const y = c.tr[1] - ry * (26 + i * 22) - fy * 24;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(u.angle);
-    ctx.fillText("s", 0, 0);
+    ctx.beginPath();
+    ctx.moveTo(6, -10);
+    ctx.bezierCurveTo(-9, -8, 9, 8, -6, 10);
+    ctx.lineWidth = 4.5;
+    ctx.stroke();
     ctx.restore();
   }
   // fatigue at BL: "/" strokes
@@ -324,25 +354,118 @@ function fatigueLevelOf(u: FieldUnit): number {
 }
 
 function drawGhost(ctx: CanvasRenderingContext2D, g: GhostUnit): void {
-  const c = corners(g);
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(...c.tl);
-  ctx.lineTo(...c.tr);
-  ctx.lineTo(...c.br);
-  ctx.lineTo(...c.bl);
-  ctx.closePath();
-  ctx.fillStyle = g.valid ? "rgba(80,200,90,0.25)" : "rgba(210,74,46,0.3)";
+  ctx.fillStyle = g.valid ? SELECT_FILL : "rgba(210,74,46,0.3)";
   ctx.strokeStyle = g.valid ? SELECT : "rgba(210,74,46,0.9)";
   ctx.lineWidth = 7;
-  ctx.fill();
-  ctx.stroke();
+  if (g.circle) {
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, GENERAL_RADIUS + 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    const c = corners(g);
+    ctx.beginPath();
+    ctx.moveTo(...c.tl);
+    ctx.lineTo(...c.tr);
+    ctx.lineTo(...c.br);
+    ctx.lineTo(...c.bl);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
   // front tick so the ghost's facing is readable
   const [fx, fy] = facing(g);
   ctx.beginPath();
   ctx.moveTo(g.x + fx * 50, g.y + fy * 50);
   ctx.lineTo(g.x + fx * 90, g.y + fy * 90);
   ctx.stroke();
+  ctx.restore();
+}
+
+/** Combat effects, drawn in world coordinates during playback. */
+function drawFx(ctx: CanvasRenderingContext2D, f: SceneFx): void {
+  const fade = 1 - f.age;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, fade);
+  switch (f.kind) {
+    case "shoot": {
+      // a volley streak from shooter to target
+      ctx.strokeStyle = "#3a2c18";
+      ctx.lineWidth = 4;
+      ctx.setLineDash([26, 22]);
+      ctx.lineDashOffset = -f.age * 90;
+      ctx.beginPath();
+      ctx.moveTo(f.x, f.y);
+      ctx.lineTo(f.x2 ?? f.x, f.y2 ?? f.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      break;
+    }
+    case "clash": {
+      // an expanding shock ring plus a spark burst
+      const r = 30 + f.age * 90;
+      ctx.strokeStyle = "#e8b34a";
+      ctx.lineWidth = 8 * fade;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "#f4e6c0";
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(f.x + Math.cos(a) * 18, f.y + Math.sin(a) * 18);
+        ctx.lineTo(f.x + Math.cos(a) * (34 + f.age * 26), f.y + Math.sin(a) * (34 + f.age * 26));
+        ctx.stroke();
+      }
+      break;
+    }
+    case "casualty": {
+      const r = 22 + f.age * 60;
+      ctx.fillStyle = "#8a1f10";
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "morale": {
+      // sinking blue chevrons
+      ctx.strokeStyle = "#5a7fa0";
+      ctx.lineWidth = 6 * fade;
+      const dy = f.age * 40;
+      ctx.beginPath();
+      ctx.moveTo(f.x - 22, f.y - 10 + dy);
+      ctx.lineTo(f.x, f.y + 6 + dy);
+      ctx.lineTo(f.x + 22, f.y - 10 + dy);
+      ctx.stroke();
+      break;
+    }
+    case "disorder": {
+      ctx.strokeStyle = "#b06a2e";
+      ctx.lineWidth = 5 * fade;
+      const r = 26 + f.age * 20;
+      ctx.beginPath();
+      for (let a = 0; a < Math.PI * 2; a += 0.4) {
+        const rr = r + Math.sin(a * 5 + f.age * 8) * 8;
+        const x = f.x + Math.cos(a) * rr;
+        const y = f.y + Math.sin(a) * rr;
+        if (a === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      break;
+    }
+    case "rout": {
+      ctx.strokeStyle = "#d24a2e";
+      ctx.lineWidth = 7 * fade;
+      const r = 40 + f.age * 120;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+  }
   ctx.restore();
 }
 

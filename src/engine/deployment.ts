@@ -12,7 +12,6 @@ import {
 import {
   makeFieldUnit,
   unitInsideRect,
-  unitsOverlap,
   type FieldGeneral,
   type FieldUnit,
 } from "./field";
@@ -79,14 +78,20 @@ export function placementReport(
   state: DeploymentState,
   moved: FieldUnit[],
 ): boolean[] {
+  // §4.3.1 — only a unit's centre is impassable, so friendly units may
+  // compenetrate a little; forbid placement only when their centres come
+  // closer than one impassable core (≈60 m).
+  const CORE = 60;
+  const coreClash = (a: FieldUnit, b: FieldUnit): boolean =>
+    Math.hypot(a.x - b.x, a.y - b.y) < CORE;
   return moved.map((m) => {
     if (!unitZoneOk(def, state.player, m)) return false;
     for (const other of state.units) {
       if (moved.some((x) => x.uid === other.uid)) continue;
-      if (unitsOverlap(m, other)) return false;
+      if (coreClash(m, other)) return false;
     }
     for (const sibling of moved) {
-      if (sibling.uid !== m.uid && unitsOverlap(m, sibling)) return false;
+      if (sibling.uid !== m.uid && coreClash(m, sibling)) return false;
     }
     return true;
   });

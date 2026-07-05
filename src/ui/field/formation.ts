@@ -57,19 +57,34 @@ export function pernoTargets(
   const angle = Math.atan2(fx, -fy);
 
   if (shift && sel.length > 1) {
-    // formation preserved: rotate & translate around the pivot
-    const cx = sel.reduce((s, u) => s + u.x, 0) / sel.length;
-    const cy = sel.reduce((s, u) => s + u.y, 0) / sel.length;
+    // §3.5 method 2 — keep the formation's shape, but pivot on the
+    // group's leading corner (as line mode does), not on its centre.
+    // Find the unit nearest to the pivot corner of the group's bounding
+    // box along the front axis, translate so it lands on the drag
+    // start, then rotate the whole body to the drag's facing.
     const groupAngle = Math.atan2(
       sel.reduce((s, u) => s + Math.sin(u.angle), 0),
       sel.reduce((s, u) => s + Math.cos(u.angle), 0),
     );
+    // rightward axis of the current formation
+    const grx = Math.cos(groupAngle);
+    const gry = Math.sin(groupAngle);
+    // the "left" corner unit (min projection on the rightward axis)
+    let anchor = sel[0]!;
+    let bestProj = Infinity;
+    for (const u of sel) {
+      const proj = u.x * grx + u.y * gry;
+      if (proj < bestProj) {
+        bestProj = proj;
+        anchor = u;
+      }
+    }
     const rot = angle - groupAngle;
     const c = Math.cos(rot);
     const s = Math.sin(rot);
     for (const u of sel) {
-      const ox = u.x - cx;
-      const oy = u.y - cy;
+      const ox = u.x - anchor.x;
+      const oy = u.y - anchor.y;
       out.set(u.uid, {
         x: pwx + ox * c - oy * s,
         y: pwy + ox * s + oy * c,
@@ -89,20 +104,17 @@ export function pernoTargets(
     const along = 100 + i * (UNIT_W + gap);
     return { x: pwx + ex * along - fx * 50, y: pwy + ey * along - fy * 50, angle };
   });
-  // §3.5: slots are claimed by proximity
-  const remaining = [...sel];
-  for (const slot of slots) {
-    let bestIdx = 0;
-    let bestD = Infinity;
-    remaining.forEach((u, i) => {
-      const d = Math.hypot(u.x - slot.x, u.y - slot.y);
-      if (d < bestD) {
-        bestD = d;
-        bestIdx = i;
-      }
-    });
-    out.set(remaining.splice(bestIdx, 1)[0]!.uid, slot);
-  }
+  // Assign units to slots so total travel is minimized. A full optimal
+  // assignment is O(n^3); instead we project each unit onto the line's
+  // axis and match sorted order to sorted slots, which is optimal for
+  // points being placed along a line and avoids the "leftmost unit runs
+  // to the rightmost slot" tangle.
+  const along = (p: { x: number; y: number }): number => (p.x - pwx) * ex + (p.y - pwy) * ey;
+  const unitsByAxis = [...sel].sort((a, b) => along(a) - along(b));
+  const slotsByAxis = slots.map((s, i) => ({ s, i })).sort((a, b) => along(a.s) - along(b.s));
+  unitsByAxis.forEach((u, k) => {
+    out.set(u.uid, slotsByAxis[k]!.s);
+  });
   return out;
 }
 

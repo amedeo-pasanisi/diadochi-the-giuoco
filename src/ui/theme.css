@@ -1081,16 +1081,286 @@ body {
 
 /* ---------- battle screen ---------- */
 
-.battle-hud {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: 900px;
-  gap: 8px;
+.battle-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.battle-hud .hud-pill {
+/* the Nike bar: uppermost, centred, no box */
+.nike-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.nike-text {
+  font-family: var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 14px;
+  color: var(--marble);
+  text-align: center;
+}
+
+.nike-track {
+  position: relative;
+  width: 420px;
+  max-width: 60vw;
+  height: 10px;
+  background: #0a0705;
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.nike-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #f4eede, #cfc7b2);
+  transition: width 700ms ease;
+}
+
+.nike-tick {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--terra-bright);
+}
+
+/* commander HUD */
+.commander-hud {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.cmd-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 120px;
+}
+
+.cmd-coin svg {
+  display: block;
+}
+
+.cmd-name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
   font-size: 13px;
-  padding: 6px 12px;
+  color: var(--marble);
+}
+
+.cmd-cond.dead {
+  color: var(--danger);
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.cmd-charisma {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.cmd-stats {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 240px;
+}
+
+.cmd-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  opacity: 0.5;
+  transition: opacity 200ms, border-color 200ms, background 200ms;
+}
+
+.cmd-stat-row.is-active {
+  opacity: 1;
+  border-color: var(--gold);
+  background: rgba(224, 178, 94, 0.08);
+}
+
+.cmd-lbl {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 10.5px;
+  color: var(--terra);
+  min-width: 92px;
+}
+
+.dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+
+.dot-empty {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px rgba(150, 120, 80, 0.5);
+}
+
+.dot-command {
+  background: var(--gold);
+}
+.dot-glance {
+  background: #7fb2c4;
+}
+.dot-brill {
+  background: #c45cff;
+}
+.dot-charisma {
+  background: var(--terra-bright);
+}
+
+.cmd-linker {
+  flex: 1;
+  min-width: 20px;
+  align-self: center;
+  border-top: 2px dotted rgba(150, 120, 80, 0.35);
+  margin: 0 -4px;
+}
+
+.cmd-buttons {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+}
+
+.cmd-btn-line {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.cmd-btn-line .btn-marble {
+  font-size: 13px;
+  padding: 8px 18px;
+}
+
+.cmd-btn-minor .btn-plain {
+  font-size: 10.5px;
+  padding: 5px 10px;
+}
+
+.cmd-horn {
+  border-color: #c45cff;
+  color: #d99bff;
+}
+
+.cmd-horn:hover:not(:disabled) {
+  background: #c45cff;
+  color: var(--ink);
+}
+
+/* enemy inspection panel, top-right, tinted */
+.field-panel-enemy {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 250px;
+  max-height: 60%;
+  overflow-y: auto;
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px rgba(210, 74, 46, 0.4), 0 6px 22px rgba(0, 0, 0, 0.75);
+}
+
+.enemy-tag {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 11px;
+  color: #7a1f10;
+  border-bottom: 1px solid rgba(122, 31, 16, 0.4);
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+}
+
+/* condition line on unit cards */
+.cond-line {
+  margin: 6px 0;
+  font-size: 11.5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.cond-bad {
+  color: #a83b22;
+  font-weight: bold;
+}
+
+.cond-morale {
+  font-weight: bold;
+}
+.cond-m3 {
+  color: #3f9e4d;
+}
+.cond-m2 {
+  color: #b8912f;
+}
+.cond-m1 {
+  color: #d24a2e;
+}
+
+/* scribe's log */
+.battle-log {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 340px;
+  max-height: 44%;
+  overflow-y: auto;
+  background: rgba(12, 9, 6, 0.94);
+  border: 1px solid var(--terra-deep);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  color: var(--papyrus);
+}
+
+.log-title {
+  font-family: var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--terra-bright);
+  margin-bottom: 6px;
+}
+
+.log-line {
+  padding: 1px 0;
+  border-bottom: 1px solid rgba(120, 80, 40, 0.15);
+  white-space: pre-wrap;
+}
+
+.wait-conds .btn-plain {
+  font-size: 11px;
 }
 
 .battle-curtain {

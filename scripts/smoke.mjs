@@ -133,41 +133,54 @@ await page.screenshot({ path: `${outDir}/9-deploy-p2.png` });
 await page.click("text=Alalai!");
 
 // ---- battle: turn 1 ----
+const sendPhase = async (label) => {
+  await page.click(`text=${label}`);
+  await page.click('.field-popup button:has-text("Send"), .field-popup button:has-text("Shout")');
+};
+
 await page.waitForSelector("text=Command Phase");
-await page.click("text=Ready");
+await page.click('.battle-curtain button:has-text("Ready")');
 await page.waitForTimeout(300);
 
 // select one P1 unit (moved earlier to 4500,4600) and march it north
 let [ux, uy] = await worldToScreen(4500, 4600);
 await page.mouse.click(ux, uy);
 await page.waitForTimeout(150);
-let [mx, my] = await worldToScreen(4300, 3200);
-await page.mouse.click(mx, my, { button: "right" });
-await page.waitForTimeout(200);
+// perno drag: right-press at a pivot, drag, release
+let [mx, my] = await worldToScreen(4100, 3200);
+let [nx, ny] = await worldToScreen(4600, 3200);
+await page.mouse.move(mx, my);
+await page.mouse.down({ button: "right" });
+await page.mouse.move(nx, ny, { steps: 8 });
+await page.waitForTimeout(120);
 await page.screenshot({ path: `${outDir}/11-battle-orders.png` });
+await page.mouse.up({ button: "right" });
+await page.waitForTimeout(150);
 
-await page.click("text=Send Messengers");
-await page.click("text=Ready"); // P2 command
-await page.click("text=Send Messengers");
-await page.click("text=Ready"); // P1 glance
-await page.click("text=Shout Orders");
-await page.click("text=Ready"); // P2 glance
-await page.click("text=Shout Orders");
+await sendPhase("Send Messengers");
+await page.click('.battle-curtain button:has-text("Ready")'); // P2 command
+await sendPhase("Send Messengers");
+await page.click('.battle-curtain button:has-text("Ready")'); // P1 glance
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${outDir}/11b-glance.png` });
+await sendPhase("Shout Orders");
+await page.click('.battle-curtain button:has-text("Ready")'); // P2 glance
+await sendPhase("Shout Orders");
 
 // battle phase playback
 await page.waitForSelector("text=The Battle Phase");
-await page.click("text=Ready");
-await page.waitForTimeout(2000);
+await page.click('.battle-curtain button:has-text("Ready")');
+await page.waitForTimeout(2200);
 await page.screenshot({ path: `${outDir}/12-battle-playback.png` });
 await page.waitForSelector("text=the field speaks", { timeout: 15000 });
 await page.screenshot({ path: `${outDir}/13-battle-events.png` });
-await page.click("text=Continue");
+await page.click('.field-popup button:has-text("Continue")');
 
 // turn 2: P1 sounds the retreat
 await page.waitForSelector("text=Command Phase");
-await page.click("text=Ready");
+await page.click('.battle-curtain button:has-text("Ready")');
 await page.click("text=Sound Retreat");
-await page.click('.field-popup button:has-text("Retreat")');
+await page.click('.field-popup button:has-text("Sound it")');
 await page.waitForSelector("text=Victory — Player 2");
 await page.screenshot({ path: `${outDir}/14-result.png` });
 

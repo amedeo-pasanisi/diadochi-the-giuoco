@@ -2,7 +2,7 @@ import type { PlayerId } from "../types";
 import { UNIT_DEFS } from "../data/units";
 import { GENERAL_DEFS } from "../data/generals";
 import { elevationLevelAt, MAP_SIZE_M, terrainAt } from "../battlefield";
-import type { Rng } from "../rng";
+import { Rng } from "../rng";
 import { facing, unitsOverlap, UNIT_HALF_D } from "../field";
 import {
   attackStat,
@@ -48,6 +48,8 @@ const STEP = 40; // metres per micro-step inside a tick
 
 export function resolveBattlePhase(s: BattleState, rng: Rng): Keyframes {
   s.events = [];
+  s.fx = [];
+  s.log = [];
   const frames: Keyframes = { paths: new Map(), ticks: TICKS };
   for (const u of liveUnits(s)) frames.paths.set(u.uid, [{ x: u.x, y: u.y, angle: u.angle }]);
 
@@ -256,8 +258,8 @@ function planFor(s: BattleState, u: BattleUnit): MovePlan | null {
       const d = Math.hypot(t.x - u.x, t.y - u.y);
       const threat = nearestEnemy(s, u);
       const threatDist = threat ? Math.hypot(threat.x - u.x, threat.y - u.y) : Infinity;
-      if (threatDist < 150 + UNIT_HALF_D) {
-        // fall back to maximum firing distance (§4.1.1)
+      // §4.1.1 — retreat the moment an enemy closes within 50 m of contact
+      if (threatDist < 50 + 2 * UNIT_HALF_D) {
         const away = Math.atan2(u.x - threat!.x, -(u.y - threat!.y));
         base.dest = {
           x: u.x + Math.sin(away) * rp.rangeM,
@@ -266,7 +268,14 @@ function planFor(s: BattleState, u: BattleUnit): MovePlan | null {
         base.fast = true;
         base.budget *= 1.5;
       } else if (d > rp.rangeM) {
-        base.dest = { x: t.x, y: t.y };
+        // close to just within firing distance, then shoot
+        const toward = Math.atan2(t.x - u.x, -(t.y - u.y));
+        const stop = d - rp.rangeM + UNIT_HALF_D;
+        base.dest = { x: u.x + Math.sin(toward) * stop, y: u.y - Math.cos(toward) * stop };
+        if (o.fast) {
+          base.fast = true;
+          base.budget *= 1.5;
+        }
       } else {
         base.faceTarget = t;
       }
@@ -279,6 +288,10 @@ function planFor(s: BattleState, u: BattleUnit): MovePlan | null {
       if (d < 600) {
         const away = Math.atan2(u.x - t.x, -(u.y - t.y));
         base.dest = { x: u.x + Math.sin(away) * 600, y: u.y - Math.cos(away) * 600 };
+        if (o.fast) {
+          base.fast = true;
+          base.budget *= 1.5;
+        }
       }
       return base;
     }
@@ -408,6 +421,10 @@ function rangedCombat(s: BattleState, rng: Rng): void {
       enemyHigher:
         elevationLevelAt(s.def, u.x, u.y) > elevationLevelAt(s.def, target.x, target.y),
     });
+    s.fx.push({ kind: "shoot", x: u.x, y: u.y, x2: target.x, y2: target.y, at: 0.55 + rng.next() * 0.25 });
+    s.log.push(
+      `⌖ ${UNIT_DEFS[u.unit].name}(P${u.player + 1}) shoots ${UNIT_DEFS[target.unit].name}: atk ${atk.toFixed(1)} vs def ${defVal.toFixed(1)}`,
+    );
     rollDamage(s, rng, u, target, atk, defVal, { training: false });
   }
 }
@@ -529,6 +546,12 @@ function combatRound(s: BattleState, rng: Rng, atkU: BattleUnit, defU: BattleUni
   });
 
   const flanked = opts.arc !== "front";
+  const mx = (atkU.x + defU.x) / 2;
+  const my = (atkU.y + defU.y) / 2;
+  s.fx.push({ kind: "clash", x: mx, y: my, at: 0.7 + rng.next() * 0.25 });
+  s.log.push(
+    `⚔ ${UNIT_DEFS[atkU.unit].name}(P${atkU.player + 1}) hits ${UNIT_DEFS[defU.unit].name} on the ${opts.arc}${opts.firstTurn ? ", charging" : ""}: atk ${atk.toFixed(1)} vs def ${defVal.toFixed(1)} (${Math.round((0.33 * atk) / defVal * 100)}%/cas)`,
+  );
   rollDamage(s, rng, atkU, defU, atk, defVal, {
     training: true,
     doubleMoraleDisorder: flanked,
@@ -551,35 +574,51 @@ function rollDamage(
 
   // casualties: chain while successful (§4.3.5.1)
   const pCas = 0.33 * (atk / defVal);
+  let casDealt = 0;
   while (roll(pCas, atkU)) {
     defU.casualties++;
+    casDealt++;
     s.stats[atkU.player].casualtiesInflicted++;
     generalCasualtyRoll(s, rng, defU);
     if (defU.casualties > 3) {
+      s.fx.push({ kind: "casualty", x: defU.x, y: defU.y, at: 0.75 });
       destroyUnit(s, defU, atkU);
       return;
     }
+  }
+  if (casDealt > 0) {
+    s.fx.push({ kind: "casualty", x: defU.x, y: defU.y, at: 0.78 });
+    s.log.push(`   → ${casDealt} casualty level${casDealt > 1 ? "s" : ""} on ${UNIT_DEFS[defU.unit].name} (now ${defU.casualties})`);
   }
 
   // morale: Morale stat replaces Defense (§4.3.5.1); flanking doubles
   // the morale and disorder attacks (§4.3.5.3)
   const mor = Math.max(0.5, moraleStat(s, defU));
   const reps = opts.doubleMoraleDisorder ? 2 : 1;
+  let morLost = 0;
   for (let r = 0; r < reps; r++) {
     const pMor = 0.33 * (atk / mor);
     while (roll(pMor, atkU) && defU.morale > 0) {
       defU.morale--;
+      morLost++;
     }
+  }
+  if (morLost > 0) {
+    s.fx.push({ kind: "morale", x: defU.x, y: defU.y, at: 0.8 });
+    s.log.push(`   → ${morLost} morale on ${UNIT_DEFS[defU.unit].name} (now ${defU.morale})`);
   }
 
   // disorder: Training replaces Defense
   const tr = trainingStat(defU);
+  let disGained = 0;
   for (let r = 0; r < reps; r++) {
     const pDis = 0.33 * (atk / tr);
     while (roll(pDis, atkU) && defU.disorder < 3) {
       addDisorder(defU, 1);
+      disGained++;
     }
   }
+  if (disGained > 0) s.fx.push({ kind: "disorder", x: defU.x, y: defU.y, at: 0.82 });
 
   // training-difference check for the more orderly side (§4.3.5.1)
   if (opts.training) {
@@ -703,6 +742,7 @@ function startRout(s: BattleState, rng: Rng, u: BattleUnit, frames: Keyframes): 
   u.status = "routing";
   u.morale = 0;
   u.order = null;
+  s.fx.push({ kind: "rout", x: u.x, y: u.y, at: 0.9 });
   u.routGoal = rng.chance(0.5) ? "camp" : "edge";
   s.stats[u.player === 0 ? 1 : 0].unitsRouted++;
   s.events.push({
@@ -1046,4 +1086,21 @@ function padFrames(frames: Keyframes): void {
   for (const path of frames.paths.values()) {
     while (path.length < TICKS + 1) path.push(path[path.length - 1]!);
   }
+}
+
+/**
+ * §4.2.1 — the Glance-Phase preview: simulate the coming Battle Phase on
+ * a throwaway clone (movement is deterministic given the orders, so the
+ * projected paths and collisions are faithful) without touching the real
+ * state or consuming the match RNG.
+ */
+export function previewBattlePhase(s: BattleState): Keyframes {
+  const clone: BattleState = structuredClone({
+    ...s,
+    events: [],
+    fx: [],
+    log: [],
+  });
+  const previewRng = new Rng((s.turn * 2654435761) >>> 0);
+  return resolveBattlePhase(clone, previewRng);
 }

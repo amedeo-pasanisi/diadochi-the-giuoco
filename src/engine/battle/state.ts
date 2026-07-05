@@ -67,6 +67,17 @@ export interface BattleEvent {
   text: string;
 }
 
+/** Transient combat effects for the playback animation. */
+export interface BattleFx {
+  kind: "shoot" | "clash" | "casualty" | "morale" | "disorder" | "rout";
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  /** 0..1 fraction of the playback at which it fires. */
+  at: number;
+}
+
 export interface SideStats {
   casualtiesInflicted: number;
   unitsDestroyed: number;
@@ -84,6 +95,9 @@ export interface BattleState {
   /** Scheduled army-wide morale check after a general falls (§4.5.1.1). */
   generalFallenCheck: [boolean, boolean];
   events: BattleEvent[];
+  /** Cleared each Battle Phase: visual effects + calculation log. */
+  fx: BattleFx[];
+  log: string[];
   stats: [SideStats, SideStats];
   winner: PlayerId | null;
   draw: boolean;
@@ -144,6 +158,8 @@ export function createBattle(
     campSacked: [false, false],
     generalFallenCheck: [false, false],
     events: [],
+    fx: [],
+    log: [],
     stats: [
       { casualtiesInflicted: 0, unitsDestroyed: 0, unitsRouted: 0 },
       { casualtiesInflicted: 0, unitsDestroyed: 0, unitsRouted: 0 },

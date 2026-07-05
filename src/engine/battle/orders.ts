@@ -11,14 +11,19 @@ import type { GeneralId } from "../types";
 export type Order =
   | { type: "march"; dest: { x: number; y: number; angle: number }; fast: boolean }
   | { type: "attack"; targets: number[]; fast: boolean; secondary: boolean }
-  | { type: "face"; targets: number[] }
-  | { type: "skirmish"; targets: number[] }
-  | { type: "avoid"; targets: number[] }
+  | { type: "face"; targets: number[]; fast: boolean }
+  | { type: "skirmish"; targets: number[]; fast: boolean }
+  | { type: "avoid"; targets: number[]; fast: boolean }
   | {
       type: "wait";
       pct: 25 | 50 | 75 | 100;
       until: ("disorder" | "morale" | "fatigue")[];
     };
+
+/** Any order that can be pushed to fast pace by a double right-click. */
+export function canBeFast(o: Order): o is Extract<Order, { fast: boolean }> {
+  return o.type !== "wait";
+}
 
 /** §4.1.1 — the base order pool: 3 + the general's Command. */
 export function commandPool(general: GeneralId): number {
