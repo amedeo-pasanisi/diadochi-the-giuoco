@@ -681,16 +681,12 @@ export function battleScreen(
           selectGeneral();
           return;
         }
-        // Shift+drag boxes a selection; plain left-drag pans the field
-        if (e.shiftKey) {
-          drag = { kind: "box", x0: sx, y0: sy, x1: sx, y1: sy };
-          return;
-        }
         const u = unitAtPoint(myUnits().filter((x) => x.uid < 9000), wx, wy);
         if (u) {
           generalSelected = false;
-          selected.clear();
-          selected.add(u.uid);
+          if (!e.shiftKey) selected.clear();
+          if (e.shiftKey && selected.has(u.uid)) selected.delete(u.uid);
+          else selected.add(u.uid);
           uiClick();
           hideEnemyPanel();
           updateInfoPanels();
@@ -701,7 +697,8 @@ export function battleScreen(
           showEnemyPanel(en);
           return;
         }
-        drag = { kind: "pan", lastX: sx, lastY: sy };
+        // empty ground: left-drag boxes a selection
+        drag = { kind: "box", x0: sx, y0: sy, x1: sx, y1: sy };
         return;
       }
 
@@ -849,8 +846,14 @@ export function battleScreen(
         const bx1 = Math.max(b.x0, b.x1);
         const by0 = Math.min(b.y0, b.y1);
         const by1 = Math.max(b.y0, b.y1);
-        if (bx1 - bx0 < 6 && by1 - by0 < 6) return;
+        if (bx1 - bx0 < 6 && by1 - by0 < 6) {
+          selected.clear();
+          generalSelected = false;
+          updateInfoPanels();
+          return;
+        }
         generalSelected = false;
+        if (!e.shiftKey) selected.clear();
         for (const u of myUnits()) {
           if (u.uid >= 9000) continue;
           const [ssx, ssy] = cam.toScreen(u.x, u.y);
