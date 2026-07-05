@@ -1,0 +1,63 @@
+========================================================
+  WARS OF THE DIADOCHI  -  how to run the game yourself
+========================================================
+
+WHERE THE GAME LIVES
+--------------------
+Everything is already on your computer, in this folder:
+
+    C:\Users\aless\diadochi
+
+You don't need to download anything. It's all here.
+
+
+THE EASY WAY TO PLAY (recommended)
+----------------------------------
+1. Open the folder  C:\Users\aless\diadochi  in File Explorer
+   (the yellow-folder program in Windows).
+2. Find the file called   PLAY   (it may show as "PLAY.bat").
+3. Double-click it.
+4. A black window opens, then your web browser opens the game
+   by itself after a few seconds.
+5. Leave the black window open while you play.
+6. To STOP the game, just close the black window.
+
+(The very first time, it spends a minute "installing pieces."
+ After that it starts in a couple of seconds.)
+
+If Windows shows a blue "Windows protected your PC" warning the
+first time, click "More info" then "Run anyway". It's just because
+the file is homemade, not from an app store.
+
+
+THE OTHER WAY (using VS Code)
+-----------------------------
+VS Code is just a fancy text editor with a built-in command line.
+
+1. Open VS Code.
+2. Menu:  File > Open Folder...  and choose  C:\Users\aless\diadochi
+3. Menu:  Terminal > New Terminal  (a panel opens at the bottom).
+4. In that panel, type this and press Enter:
+
+       npm run dev
+
+5. It prints a line like:   Local:  http://localhost:5173/
+   Hold CTRL and click that link, or paste it into your browser.
+6. To stop it: click in the terminal panel and press CTRL + C.
+
+If it says 'npm is not recognized', close VS Code completely and
+reopen it once - it needs a restart to notice the tools that were
+installed.
+
+
+WHAT "localhost" MEANS
+----------------------
+"localhost" just means "this very computer." The game runs a tiny
+private web server on your own machine and shows it in your browser.
+Nothing is online, nobody else can see it - it never leaves your PC.
+
+
+DID I BREAK SOMETHING?
+----------------------
+You can't hurt anything by clicking PLAY or closing the black window.
+Worst case, close everything and double-click PLAY again.
