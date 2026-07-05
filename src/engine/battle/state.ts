@@ -368,6 +368,71 @@ function generalCost(s: BattleState, player: PlayerId): number {
   return GENERAL_DEFS[s.musters[player].general!].cost;
 }
 
+/* ---------- general attach / detach (§3.4, §4.4) ---------- */
+
+/** His own unit "disappears" and he rides at the host's centre. */
+export function attachGeneralTo(s: BattleState, player: PlayerId, hostUid: number): void {
+  const g = s.generals[player];
+  const escort = unitByUid(s, g.unitUid);
+  if (escort) {
+    escort.removed = true;
+    escort.engaged = [];
+  }
+  g.attachedTo = hostUid;
+  g.unitUid = -1;
+}
+
+/** He steps off: his escort re-forms on the spot, Hetairoi profile intact. */
+export function detachGeneralFrom(s: BattleState, player: PlayerId): void {
+  const g = s.generals[player];
+  const host = g.attachedTo !== null ? unitByUid(s, g.attachedTo) : undefined;
+  const x = host?.x ?? g.x;
+  const y = host?.y ?? g.y;
+  const angle = host?.angle ?? (player === 0 ? 0 : Math.PI);
+  g.attachedTo = null;
+  g.x = x;
+  g.y = y;
+  const uid = 9000 + player;
+  const existing = unitByUid(s, uid);
+  if (existing) {
+    existing.removed = false;
+    existing.fled = false;
+    existing.x = x;
+    existing.y = y;
+    existing.angle = angle;
+    existing.status = "normal";
+    existing.order = null;
+    existing.engaged = [];
+    existing.terrain = terrainAt(s.def, x, y);
+  } else {
+    s.units.push({
+      uid,
+      unit: "hetairoi",
+      player,
+      x,
+      y,
+      angle,
+      morale: 3,
+      fatigue: 0,
+      disorder: 0,
+      casualties: 0,
+      fatigueSpent: 0,
+      status: "normal",
+      order: null,
+      waitBank: 0,
+      engaged: [],
+      restingForced: false,
+      routGoal: null,
+      pursuitTarget: null,
+      lastClimb: 0,
+      terrain: terrainAt(s.def, x, y),
+      removed: false,
+      fled: false,
+    });
+  }
+  g.unitUid = uid;
+}
+
 /* ---------- misc geometry ---------- */
 
 export function ownCamp(player: PlayerId): { x: number; y: number } {

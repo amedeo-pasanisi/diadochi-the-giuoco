@@ -28,7 +28,6 @@ const HILL_LINE = "#8a5a2e";
 const WATER = "#7fb2c4";
 const WATER_DEEP = "#6aa0b4";
 const OLIVE = "#6f6636";
-const TRUNK = "#7a4a26";
 const INK = "#6e3417";
 
 /* ---------- marching squares: iso-contours of the heightfield ---------- */
@@ -223,8 +222,7 @@ function woodsSVG(w: WoodsGeometry, seed: number): string {
     const y = w.cy + Math.sin(th) * r * w.ry + (hash01(seed, i, 17) - 0.5) * 160;
     if (!pointInPolygon(x, y, w.poly)) continue;
     const sc = 0.8 + hash01(seed, i, 23) * 0.5;
-    s += `<line x1="${x.toFixed(0)}" y1="${(y + 66 * sc).toFixed(0)}" x2="${x.toFixed(0)}" y2="${y.toFixed(0)}" stroke="${TRUNK}" stroke-width="${(20 * sc).toFixed(0)}"/>`;
-    s += `<circle cx="${x.toFixed(0)}" cy="${(y - 38 * sc).toFixed(0)}" r="${(58 * sc).toFixed(0)}" fill="${OLIVE}"/>`;
+    s += `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${(60 * sc).toFixed(0)}" fill="${OLIVE}"/>`;
   }
   return s;
 }

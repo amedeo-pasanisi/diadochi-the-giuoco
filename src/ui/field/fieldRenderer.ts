@@ -24,9 +24,11 @@ import type { Camera } from "./camera";
 const P1_FILL = "rgba(242,236,222,0.92)";
 const P2_FILL = "rgba(24,18,13,0.94)";
 const P1_EDGE = "#3a3128";
-const P2_EDGE = "#caa06a";
+const P2_EDGE = "#f2ecde";
 const CAV_HALF = "rgba(150,141,128,0.9)"; // the grey half of cavalry (§3.3)
 const SELECT = "rgba(80,200,90,0.95)"; // faint green selection (§3.5)
+const BAD_MARK = "#d24a2e"; // casualties, disorder, fatigue
+const MORALE_COLORS: Record<number, string> = { 3: "#3f9e4d", 2: "#e0b25e", 1: "#d24a2e" };
 
 const mapCache = new Map<string, HTMLImageElement>();
 
@@ -237,14 +239,17 @@ function drawUnit(ctx: CanvasRenderingContext2D, u: FieldUnit, selected: boolean
 
 function drawOgives(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: string, bold = false): void {
   const [rx, ry] = rightward(u);
+  // solid figures in the player's colour, not hollow outlines
+  ctx.fillStyle = u.player === 0 ? P1_FILL : P2_FILL;
   ctx.strokeStyle = ink;
-  ctx.lineWidth = bold ? 12 : 9;
+  ctx.lineWidth = bold ? 10 : 6;
   for (let i = 0; i < 4; i++) {
     const t = (i - 1.5) * 46;
     const cx = u.x + rx * t;
     const cy = u.y + ry * t;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, 14, 34, u.angle, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, 15, 35, u.angle, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
   }
 }
@@ -258,9 +263,11 @@ function drawStatusMarks(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: strin
   const [fx, fy] = facing(u);
   const [rx, ry] = rightward(u);
   ctx.save();
-  ctx.strokeStyle = ink;
-  ctx.fillStyle = ink;
+  // the bad news is always written in red
+  ctx.strokeStyle = BAD_MARK;
+  ctx.fillStyle = BAD_MARK;
   ctx.lineWidth = 5;
+  void ink;
 
   // casualties at TL: vertical dashes stepping inward along the front
   for (let i = 0; i < u.casualties; i++) {
@@ -294,15 +301,16 @@ function drawStatusMarks(ctx: CanvasRenderingContext2D, u: FieldUnit, ink: strin
     ctx.lineTo(x + 8, y - 9);
     ctx.stroke();
   }
-  // morale at BR: small ogives in red so they read at a glance
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = "#d24a2e";
-  ctx.fillStyle = "rgba(210,74,46,0.55)";
+  // morale at BR: traffic-light dots — green at 3, yellow at 2, red at 1
+  const moraleColor = MORALE_COLORS[Math.max(1, Math.min(3, u.morale))] ?? "#d24a2e";
+  ctx.fillStyle = moraleColor;
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 2;
   for (let i = 0; i < u.morale; i++) {
     const x = c.br[0] - rx * (22 + i * 22) + fx * 22;
     const y = c.br[1] - ry * (22 + i * 22) + fy * 22;
     ctx.beginPath();
-    ctx.ellipse(x, y, 6, 11, u.angle, 0, Math.PI * 2);
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
   }

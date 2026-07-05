@@ -8,6 +8,7 @@ import {
   attackStat,
   chargeBonus,
   defenseStat,
+  detachGeneralFrom,
   enduranceOf,
   fatigueLevels,
   generalOf,
@@ -781,38 +782,8 @@ function generalCasualtyRoll(s: BattleState, rng: Rng, u: BattleUnit): void {
 }
 
 function detachGeneralInPlace(s: BattleState, g: BattleGeneral, host: BattleUnit): void {
-  g.attachedTo = null;
-  g.x = host.x;
-  g.y = host.y;
-  // he stands alone now: raise his escort as a unit on the spot
-  const escortUid = 9000 + g.player;
-  if (!unitByUid(s, escortUid)) {
-    s.units.push({
-      uid: escortUid,
-      unit: "hetairoi",
-      player: g.player,
-      x: host.x,
-      y: host.y,
-      angle: host.angle,
-      morale: 3,
-      fatigue: 0,
-      disorder: 0,
-      casualties: 0,
-      fatigueSpent: 0,
-      status: "normal",
-      order: null,
-      waitBank: 0,
-      engaged: [],
-      restingForced: false,
-      routGoal: null,
-      pursuitTarget: null,
-      lastClimb: 0,
-      terrain: terrainAt(s.def, host.x, host.y),
-      removed: false,
-      fled: false,
-    });
-  }
-  g.unitUid = escortUid;
+  void host;
+  detachGeneralFrom(s, g.player); // §4.4 — he stays where the unit left him
 }
 
 function generalUnitLost(s: BattleState, g: BattleGeneral, unit: BattleUnit): void {

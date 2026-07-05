@@ -7,6 +7,7 @@ import { coinSVG } from "../art/coinArt";
 import { alalai, dismissThud, uiClick } from "../sound";
 import { Camera } from "../field/camera";
 import { drawScene, loadMapImage, type GhostUnit } from "../field/fieldRenderer";
+import { glanceRingLines, pernoTargets } from "../field/formation";
 import type { PlayerId, UnitDef } from "../../engine/types";
 import { UNIT_DEFS } from "../../engine/data/units";
 import { GENERAL_DEFS } from "../../engine/data/generals";
@@ -27,11 +28,6 @@ import {
   corners,
   type FieldUnit,
 } from "../../engine/field";
-
-const UNIT_W = 200;
-/** §4.1.1 formation continuity limit is 200 m; stretching stops 25 m short. */
-const MAX_GAP = 175;
-const MIN_GAP = 20;
 
 /**
  * §3 — the deployment phase.
@@ -327,81 +323,8 @@ export function deployScreen(
     if (drag.kind !== "place") return;
     const sel = selectedUnits();
     if (sel.length === 0) return;
-
-    const [pwx, pwy] = drag.downW;
-    const [cwx, cwy] = drag.curW;
-    const dragLen = Math.hypot(cwx - pwx, cwy - pwy);
-    const dragging = dragLen > 60;
-
-    if (!dragging) {
-      if (sel.length === 1) {
-        const u = sel[0]!;
-        ghostTargets.set(u.uid, { x: pwx, y: pwy, angle: u.angle });
-      } else {
-        const cx = sel.reduce((s, u) => s + u.x, 0) / sel.length;
-        const cy = sel.reduce((s, u) => s + u.y, 0) / sel.length;
-        for (const u of sel) {
-          ghostTargets.set(u.uid, { x: u.x + pwx - cx, y: u.y + pwy - cy, angle: u.angle });
-        }
-      }
-    } else {
-      // the drag defines the front line from the pivot ("perno"); the
-      // line faces the LEFT of the drag — drag the other way to face
-      // rearward. No auto-facing correction.
-      const ex = (cwx - pwx) / dragLen;
-      const ey = (cwy - pwy) / dragLen;
-      const fx = ey;
-      const fy = -ex;
-      const angle = Math.atan2(fx, -fy);
-
-      if (drag.shift && sel.length > 1) {
-        const cx = sel.reduce((s, u) => s + u.x, 0) / sel.length;
-        const cy = sel.reduce((s, u) => s + u.y, 0) / sel.length;
-        const groupAngle = Math.atan2(
-          sel.reduce((s, u) => s + Math.sin(u.angle), 0),
-          sel.reduce((s, u) => s + Math.cos(u.angle), 0),
-        );
-        const rot = angle - groupAngle;
-        const c = Math.cos(rot);
-        const s = Math.sin(rot);
-        for (const u of sel) {
-          const ox = u.x - cx;
-          const oy = u.y - cy;
-          ghostTargets.set(u.uid, {
-            x: pwx + ox * c - oy * s,
-            y: pwy + ox * s + oy * c,
-            angle: u.angle + rot,
-          });
-        }
-      } else {
-        const n = sel.length;
-        let gap = MIN_GAP;
-        if (n > 1) {
-          gap = Math.max(MIN_GAP, Math.min(MAX_GAP, (dragLen - n * UNIT_W) / (n - 1)));
-        }
-        const slots = sel.map((_, i) => {
-          const along = 100 + i * (UNIT_W + gap);
-          return { x: pwx + ex * along - fx * 50, y: pwy + ey * along - fy * 50, angle };
-        });
-        const remaining = [...sel];
-        for (const slot of slots) {
-          let bestIdx = 0;
-          let bestD = Infinity;
-          remaining.forEach((u, i) => {
-            const d = Math.hypot(u.x - slot.x, u.y - slot.y);
-            if (d < bestD) {
-              bestD = d;
-              bestIdx = i;
-            }
-          });
-          const u = remaining.splice(bestIdx, 1)[0]!;
-          ghostTargets.set(u.uid, slot);
-        }
-      }
-    }
-
-    const sel2 = selectedUnits();
-    const moved: FieldUnit[] = sel2.map((u) => ({ ...u, ...ghostTargets.get(u.uid)! }));
+    ghostTargets = pernoTargets(sel, drag.downW, drag.curW, drag.shift);
+    const moved: FieldUnit[] = sel.map((u) => ({ ...u, ...ghostTargets.get(u.uid)! }));
     const report = placementReport(def, state, moved);
     ghosts = moved.map((m, i) => ({ x: m.x, y: m.y, angle: m.angle, valid: report[i] === true }));
   }
@@ -643,6 +566,7 @@ export function deployScreen(
     syncAttachedGeneral();
     const ctx = canvas.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const [ggx, ggy] = generalPos();
     drawScene(ctx, {
       def,
       cam,
@@ -652,6 +576,7 @@ export function deployScreen(
       selected,
       generalSelected,
       ghosts,
+      lines: glanceRingLines(ggx, ggy),
       selectBox: drag.kind === "box" ? drag : undefined,
     });
     requestAnimationFrame(frame);

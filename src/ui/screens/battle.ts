@@ -1,12 +1,13 @@
 import { clear, el, fromHTML } from "../dom";
 import { applyMeander } from "../art/ornaments";
 import { createTimer, type PhaseTimer } from "../components/timer";
-import { unitTooltipHTML } from "../components/tooltip";
+import { attachTooltip, unitTooltipHTML } from "../components/tooltip";
 import { unitArtSVG } from "../art/unitArt";
 import { coinSVG } from "../art/coinArt";
 import { alalai, dismissThud, marchHorn, uiClick } from "../sound";
 import { Camera } from "../field/camera";
 import { drawScene, loadMapImage, type GhostUnit, type SceneLine } from "../field/fieldRenderer";
+import { glanceRingLines, pernoTargets, type PernoTarget } from "../field/formation";
 import type { PlayerId, UnitDef } from "../../engine/types";
 import { UNIT_DEFS } from "../../engine/data/units";
 import { GENERAL_DEFS } from "../../engine/data/generals";
@@ -15,17 +16,19 @@ import { containsPoint, type FieldUnit } from "../../engine/field";
 import {
   COMMAND_SECONDS,
   GLANCE_SECONDS,
-  GLANCE_RADIUS,
   commandPool,
   glancePool,
   orderCost,
   type Order,
 } from "../../engine/battle/orders";
 import {
+  attachGeneralTo,
+  detachGeneralFrom,
   generalOf,
   generalPosition,
   liveUnits,
   speedBudgetM,
+  unitByUid,
   victoryBar,
   withinGlance,
   type BattleState,
@@ -85,11 +88,28 @@ export function battleScreen(
   );
 
   const ordersPill = el("div", { class: "hud-pill" });
-  const brillPill = el("div", { class: "hud-pill" });
-  const barPill = el("div", { class: "hud-pill" });
   const timerSlot = el("span", {});
 
-  const hornBtn = el("button", { class: "btn-plain" }, "Blow Horn") as HTMLButtonElement;
+  // the victory bar is an actual bar: white (P1) against black (P2)
+  const barFill = el("div", { class: "vbar-fill" });
+  const barBox = el(
+    "div",
+    { class: "hud-pill vbar-box" },
+    el("span", { class: "pill-label" }, "Bar"),
+    el("div", { class: "vbar-track" }, barFill, el("div", { class: "vbar-tick" })),
+  );
+
+  // Brilliancy and its horn live in one box — the horn SPENDS brilliancy
+  const hornBtn = el("button", { class: "btn-plain horn-btn" }, "Blow Horn +3") as HTMLButtonElement;
+  const brillDots = el("span", { class: "brill-dots" }, "");
+  const brillGroup = el(
+    "div",
+    { class: "hud-pill brill-group" },
+    el("span", { class: "pill-label" }, "Brilliancy"),
+    brillDots,
+    hornBtn,
+  );
+
   const recallBtn = el("button", { class: "btn-plain" }, "Recall Orders") as HTMLButtonElement;
   const retreatBtn = el("button", { class: "btn-plain" }, "Sound Retreat") as HTMLButtonElement;
   const doneBtn = el("button", { class: "btn-marble" }, "Send Messengers") as HTMLButtonElement;
@@ -101,16 +121,23 @@ export function battleScreen(
     el(
       "div",
       { class: "deploy-header-right battle-hud" },
-      barPill,
+      barBox,
       ordersPill,
-      brillPill,
+      brillGroup,
       timerSlot,
-      hornBtn,
       recallBtn,
       retreatBtn,
       doneBtn,
     ),
   );
+
+  /* brief papyrus explanations on hover */
+  attachTooltip(barBox, () => `<h4>The victory bar</h4><div class="tt-role">The weight of surviving strength, white against black. At ±100% the battle ends; a losing bar saps your army's morale.</div>`);
+  attachTooltip(ordersPill, () => `<h4>Orders</h4><div class="tt-role">3 + your general's Command each Command Phase; his Glance stat in the Glance Phase. A formation move costs one order per connected group (within 200 m).</div>`);
+  attachTooltip(brillGroup, () => `<h4>Brilliancy</h4><div class="tt-role">Blow the horn to spend one point of Brilliancy for +3 orders this phase. Spent points never return — genius is a finite resource.</div>`);
+  attachTooltip(recallBtn, () => `<h4>Recall orders</h4><div class="tt-role">Cancel the selected units' orders and refund what they cost. Ctrl+Z undoes the last order given.</div>`);
+  attachTooltip(retreatBtn, () => `<h4>Sound retreat</h4><div class="tt-role">Concede the field. The battle ends at once — your rival takes the victory.</div>`);
+  attachTooltip(doneBtn, () => `<h4>${phase === "command" ? "Send messengers" : "Shout orders"}</h4><div class="tt-role">Seal your orders and pass the turn on. Unspent orders are lost.</div>`);
 
   /* info panels (same pattern as deployment) */
   const generalPanel = el("div", { class: "field-general-panel" });
@@ -162,17 +189,11 @@ export function battleScreen(
     const g = GENERAL_DEFS[state.musters[actor].general!];
     phaseTitle.textContent = `Turn ${state.turn} · ${phase === "command" ? "Command" : "Glance"} Phase — Player ${actor + 1} (${g.name})`;
     ordersPill.innerHTML = `<span class="pill-label">Orders</span>${remaining()} / ${budgetTotal}`;
-    brillPill.innerHTML = `<span class="pill-label">Brilliancy</span>${brilliancyLeft[actor]}`;
-    const bar = Math.round(victoryBar(state));
-    barPill.innerHTML = `<span class="pill-label">Bar</span>${bar > 0 ? "+" : ""}${bar}%`;
+    brillDots.textContent = "●".repeat(brilliancyLeft[actor]) + "○".repeat(Math.max(0, 3 - brilliancyLeft[actor]));
+    const bar = victoryBar(state); // positive favours P1 (white)
+    barFill.style.width = `${Math.max(0, Math.min(100, 50 + bar / 2))}%`;
     hornBtn.disabled = hornBlown || brilliancyLeft[actor] <= 0;
-    doneBtn.textContent = hornBlown
-      ? phase === "command"
-        ? "Send Messengers"
-        : "Shout Orders"
-      : phase === "command"
-        ? "Send Messengers"
-        : "Shout Orders";
+    doneBtn.textContent = phase === "command" ? "Send Messengers" : "Shout Orders";
   }
 
   function renderGeneralPanel(): void {
@@ -227,6 +248,27 @@ export function battleScreen(
       return;
     }
     unitPanel.style.display = "flex";
+    // the general's escort gets his own card, under his own name
+    if (sel.some((u) => u.uid >= 9000)) {
+      const g = GENERAL_DEFS[state.musters[actor].general!];
+      const h = UNIT_DEFS.hetairoi;
+      cardsRow.append(miniCard(h, g.name, 1, "elite heavy cavalry"));
+      infoPanel.innerHTML = `
+        <h4>${g.name}</h4>
+        <div class="tt-epithet">the general's own banda — fights as ${h.name}</div>
+        <div class="tt-role">${g.role}</div>
+        <div class="tt-stats">
+          <div><b>Attack</b> ${h.attack} <span style="opacity:.75">+${h.charge} charge</span></div>
+          <div><b>Defense</b> ${h.defense} <span style="opacity:.75">+${h.formation} formation</span></div>
+          <div><b>Training</b> ${h.training}</div>
+          <div><b>Speed</b> ${h.speed}</div>
+          <div><b>Endurance</b> ${h.endurance}</div>
+          <div><b>Morale</b> ${h.morale}</div>
+        </div>
+        <div class="tt-note">Right-click a friendly unit within 400 m to attach him; attached units
+        roll with Advantage. If his unit breaks, he flees or dies (§4.4).</div>`;
+      return;
+    }
     const groups = new Map<string, { def: UnitDef; count: number }>();
     for (const u of sel) {
       const d = UNIT_DEFS[u.unit];
@@ -284,6 +326,8 @@ export function battleScreen(
     phase = p;
     actor = a;
     selected.clear();
+    generalSelected = false;
+    ghostTargets = new Map();
     batches = [];
     hornBlown = false;
     const gid = state.musters[a].general!;
@@ -446,9 +490,32 @@ export function battleScreen(
   type Drag =
     | { kind: "none" }
     | { kind: "box"; x0: number; y0: number; x1: number; y1: number; button: number }
+    | { kind: "place"; downW: [number, number]; curW: [number, number]; shift: boolean }
     | { kind: "pan"; lastX: number; lastY: number };
   let drag: Drag = { kind: "none" };
   let lastRight = { t: 0, x: 0, y: 0 };
+  let ghostTargets = new Map<number, PernoTarget>();
+  let generalSelected = false;
+
+  const generalName = (): string => GENERAL_DEFS[state.musters[actor].general!].name;
+
+  /** §4.1.2 — a quick second right-click sets the last order to fast pace. */
+  function upgradeLastFast(): void {
+    const b = batches[batches.length - 1];
+    if (!b) return;
+    let changed = false;
+    for (const uid of b.uids) {
+      const u = unitByUid(state, uid);
+      if (u?.order && (u.order.type === "march" || u.order.type === "attack") && !u.order.fast) {
+        u.order.fast = true;
+        changed = true;
+      }
+    }
+    if (changed) {
+      marchHorn();
+      setHint("Fast pace! They will arrive sooner — and wearier.");
+    }
+  }
 
   const sig = { signal: abort.signal };
   canvas.addEventListener("contextmenu", (e) => e.preventDefault(), sig);
@@ -482,7 +549,49 @@ export function battleScreen(
       }
       if (e.button === 0) {
         hidePopup();
-        const u = unitAtPoint(myUnits(), wx, wy);
+        // the general's star wins the click, as in deployment
+        const g = generalOf(state, actor);
+        const [ggx, ggy] = generalPosition(state, g);
+        if (g.condition === "fighting" && Math.hypot(wx - ggx, wy - ggy) <= 70) {
+          selected.clear();
+          generalSelected = true;
+          if (g.attachedTo !== null) {
+            const host = unitByUid(state, g.attachedTo);
+            showPopup(
+              `${generalName()} rides with the ${host ? UNIT_DEFS[host.unit].name : "ranks"}.`,
+              [
+                [
+                  "Detach him",
+                  () => {
+                    detachGeneralFrom(state, actor);
+                    generalSelected = true;
+                    selected.clear();
+                    selected.add(9000 + actor);
+                    hidePopup();
+                    uiClick();
+                    setHint(`${generalName()} takes his own station.`);
+                    updateInfoPanels();
+                  },
+                ],
+                ["Leave him", hidePopup],
+              ],
+            );
+          } else {
+            selected.add(g.unitUid);
+            setHint(
+              `${generalName()} awaits — right-click ground to ride, right-click a unit to attach.`,
+            );
+          }
+          uiClick();
+          updateInfoPanels();
+          return;
+        }
+        generalSelected = false;
+        const u = unitAtPoint(
+          myUnits().filter((x) => x.uid < 9000),
+          wx,
+          wy,
+        );
         if (u) {
           if (!e.shiftKey) selected.clear();
           if (e.shiftKey && selected.has(u.uid)) selected.delete(u.uid);
@@ -496,11 +605,49 @@ export function battleScreen(
       }
       if (e.button === 2) {
         const now = performance.now();
-        const fast = now - lastRight.t < 400 && Math.hypot(sx - lastRight.x, sy - lastRight.y) < 24;
+        const dbl = now - lastRight.t < 400 && Math.hypot(sx - lastRight.x, sy - lastRight.y) < 24;
         lastRight = { t: now, x: sx, y: sy };
+        if (dbl) {
+          upgradeLastFast(); // §4.1.2 — double right-click = fast pace
+          return;
+        }
 
-        const enemy = unitAtPoint(enemyUnits(), wx, wy);
         const sel = selectedUnits();
+        const enemy = unitAtPoint(enemyUnits(), wx, wy);
+
+        // attach flow: general selected, right-click on a friendly unit
+        if (generalSelected && !enemy) {
+          const friendly = unitAtPoint(
+            myUnits().filter((x) => x.uid < 9000),
+            wx,
+            wy,
+          );
+          if (friendly) {
+            const g = generalOf(state, actor);
+            const esc = g.unitUid >= 0 ? unitByUid(state, g.unitUid) : undefined;
+            if (esc && !esc.removed && Math.hypot(esc.x - friendly.x, esc.y - friendly.y) <= 400) {
+              showPopup(`Attach ${generalName()} to the ${UNIT_DEFS[friendly.unit].name}?`, [
+                [
+                  "Attach",
+                  () => {
+                    attachGeneralTo(state, actor, friendly.uid);
+                    selected.clear();
+                    generalSelected = false;
+                    hidePopup();
+                    uiClick();
+                    setHint(`${generalName()} rides at their centre. Click his star to detach.`);
+                    updateInfoPanels();
+                  },
+                ],
+                ["Cancel", hidePopup],
+              ]);
+            } else {
+              dismissThud();
+              setHint(`${generalName()} must ride within 400 m before attaching — move him closer first.`);
+            }
+            return;
+          }
+        }
 
         if (sel.length === 0) {
           drag = { kind: "pan", lastX: sx, lastY: sy };
@@ -517,18 +664,15 @@ export function battleScreen(
             issueOrders(sel, () => ({
               type: "attack",
               targets: [enemy.uid],
-              fast,
+              fast: false,
               secondary: e.shiftKey,
             }));
           }
           return;
         }
-        // march order to ground — §4.1.1, same fan as deployment
-        const targets = marchTargets(sel, wx, wy, e.shiftKey);
-        issueOrders(sel, (u) => {
-          const t = targets.get(u.uid);
-          return t ? { type: "march", dest: t, fast } : null;
-        });
+        // march to ground: the same perno drag as deployment (§4.1.1)
+        drag = { kind: "place", downW: [wx, wy], curW: [wx, wy], shift: e.shiftKey };
+        ghostTargets = pernoTargets(sel, drag.downW, drag.curW, drag.shift);
       }
     },
     sig,
@@ -547,6 +691,10 @@ export function battleScreen(
       } else if (drag.kind === "box") {
         drag.x1 = sx;
         drag.y1 = sy;
+      } else if (drag.kind === "place") {
+        drag.curW = cam.toWorld(sx, sy);
+        drag.shift = e.shiftKey;
+        ghostTargets = pernoTargets(selectedUnits(), drag.downW, drag.curW, drag.shift);
       }
     },
     sig,
@@ -555,6 +703,18 @@ export function battleScreen(
   window.addEventListener(
     "mouseup",
     (e) => {
+      if (drag.kind === "place" && e.button === 2) {
+        const targets = ghostTargets;
+        ghostTargets = new Map();
+        drag = { kind: "none" };
+        if (targets.size > 0) {
+          issueOrders(selectedUnits(), (u) => {
+            const t = targets.get(u.uid);
+            return t ? { type: "march", dest: t, fast: false } : null;
+          });
+        }
+        return;
+      }
       if (drag.kind !== "box") {
         if (drag.kind === "pan" && (e.button === 1 || e.button === 2)) drag = { kind: "none" };
         return;
@@ -575,7 +735,10 @@ export function battleScreen(
         return ssx >= bx0 && ssx <= bx1 && ssy >= by0 && ssy <= by1;
       };
       selected.clear();
-      for (const u of myUnits()) if (inBox(u)) selected.add(u.uid);
+      generalSelected = false;
+      for (const u of myUnits()) {
+        if (u.uid < 9000 && inBox(u)) selected.add(u.uid);
+      }
       if (selected.size > 0) uiClick();
       updateInfoPanels();
     },
@@ -609,6 +772,8 @@ export function battleScreen(
           break;
         case "Escape":
           selected.clear();
+          generalSelected = false;
+          ghostTargets = new Map();
           hidePopup();
           updateInfoPanels();
           break;
@@ -647,54 +812,15 @@ export function battleScreen(
     );
   }
 
-  /** March destinations: single point, or the deployment-style line fan. */
-  function marchTargets(
-    sel: BattleUnit[],
-    wx: number,
-    wy: number,
-    keepFormation: boolean,
-  ): Map<number, { x: number; y: number; angle: number }> {
-    const out = new Map<number, { x: number; y: number; angle: number }>();
-    if (sel.length === 1) {
-      const u = sel[0]!;
-      out.set(u.uid, { x: wx, y: wy, angle: u.angle });
-      return out;
-    }
-    const cx = sel.reduce((s2, u) => s2 + u.x, 0) / sel.length;
-    const cy = sel.reduce((s2, u) => s2 + u.y, 0) / sel.length;
-    if (keepFormation) {
-      for (const u of sel) out.set(u.uid, { x: u.x + wx - cx, y: u.y + wy - cy, angle: u.angle });
-      return out;
-    }
-    // line abreast facing the enemy side, slots claimed by proximity
-    const angle = actor === 0 ? 0 : Math.PI;
-    const dir = 1;
-    const n = sel.length;
-    const slots = sel.map((_, i) => ({
-      x: wx + dir * (i - (n - 1) / 2) * 220,
-      y: wy,
-      angle,
-    }));
-    const remainingU = [...sel];
-    for (const slot of slots) {
-      let bi = 0;
-      let bd = Infinity;
-      remainingU.forEach((u, i) => {
-        const d = Math.hypot(u.x - slot.x, u.y - slot.y);
-        if (d < bd) {
-          bd = d;
-          bi = i;
-        }
-      });
-      out.set(remainingU.splice(bi, 1)[0]!.uid, slot);
-    }
-    return out;
-  }
-
   function unitAtPoint(units: BattleUnit[], wx: number, wy: number): BattleUnit | null {
     for (let i = units.length - 1; i >= 0; i--) {
       const u = units[i]!;
-      if (containsPoint(u, wx, wy)) return u;
+      // a general's escort is a star on the map, so it takes star-sized clicks
+      if (u.uid >= 9000) {
+        if (Math.hypot(wx - u.x, wy - u.y) <= 70) return u;
+      } else if (containsPoint(u, wx, wy)) {
+        return u;
+      }
     }
     return null;
   }
@@ -772,24 +898,17 @@ export function battleScreen(
         }
       }
     }
-    // glance radius ring
-    if (phase === "glance") {
-      const g = generalOf(state, actor);
-      if (g.condition !== "dead") {
-        const [gx, gy] = generalPosition(state, g);
-        for (let i = 0; i < 36; i++) {
-          const a1 = (i / 36) * Math.PI * 2;
-          const a2 = ((i + 0.55) / 36) * Math.PI * 2;
-          lines.push({
-            x1: gx + Math.cos(a1) * GLANCE_RADIUS,
-            y1: gy + Math.sin(a1) * GLANCE_RADIUS,
-            x2: gx + Math.cos(a2) * GLANCE_RADIUS,
-            y2: gy + Math.sin(a2) * GLANCE_RADIUS,
-            color: "rgba(224,178,94,0.6)",
-            width: 8,
-          });
-        }
+    // live perno preview while dragging a march order
+    if (drag.kind === "place") {
+      for (const t of ghostTargets.values()) {
+        ghosts.push({ x: t.x, y: t.y, angle: t.angle, valid: true });
       }
+    }
+    // the general's glance radius, always visible while giving orders
+    const g = generalOf(state, actor);
+    if (g.condition !== "dead") {
+      const [gx, gy] = generalPosition(state, g);
+      lines.push(...glanceRingLines(gx, gy));
     }
     return { ghosts, lines };
   }
@@ -835,17 +954,26 @@ export function battleScreen(
     const ctx = canvas.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const proj = projections();
+    const disp = displayUnits();
     drawScene(ctx, {
       def: state.def,
       cam,
-      units: displayUnits(),
+      // escorts render as the general's star, never as a rectangle
+      units: disp.filter((u) => u.uid < 9000),
       generals: state.generals
         .filter((g) => g.condition === "fighting")
         .map((g) => {
-          const [gx, gy] = generalPosition(state, g);
-          return { player: g.player, x: gx, y: gy, attachedTo: g.attachedTo };
+          const hostUid = g.attachedTo ?? g.unitUid;
+          const host = disp.find((u) => u.uid === hostUid);
+          return {
+            player: g.player,
+            x: host?.x ?? g.x,
+            y: host?.y ?? g.y,
+            attachedTo: g.attachedTo,
+          };
         }),
       selected,
+      generalSelected: generalSelected || selected.has(9000 + actor),
       ghosts: proj.ghosts,
       lines: proj.lines,
     });

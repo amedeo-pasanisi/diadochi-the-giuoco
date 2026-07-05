@@ -993,9 +993,64 @@ body {
   left: 50%;
   transform: translateX(-50%);
   padding: 14px 22px;
-  max-width: 380px;
+  max-width: 540px;
   text-align: center;
   z-index: 50;
+}
+
+.field-popup-actions {
+  flex-wrap: wrap;
+}
+
+/* the victory bar: white strength against black */
+.vbar-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vbar-track {
+  position: relative;
+  width: 150px;
+  height: 13px;
+  background: #0a0705;
+  border: 1px solid var(--terra-deep);
+  border-radius: 2px;
+}
+
+.vbar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #f4eede, #cfc7b2);
+  transition: width 600ms ease;
+}
+
+.vbar-tick {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--terra);
+}
+
+/* brilliancy + its horn, visibly one mechanism */
+.brill-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.brill-dots {
+  color: var(--gold);
+  letter-spacing: 0.16em;
+}
+
+.horn-btn {
+  font-size: 10.5px;
+  padding: 4px 9px;
 }
 
 .field-popup-msg {
