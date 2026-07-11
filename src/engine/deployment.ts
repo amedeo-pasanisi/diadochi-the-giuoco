@@ -10,6 +10,7 @@ import {
   type BattlefieldDef,
 } from "./battlefield";
 import {
+  containsPoint,
   makeFieldUnit,
   unitInsideRect,
   type FieldGeneral,
@@ -78,12 +79,12 @@ export function placementReport(
   state: DeploymentState,
   moved: FieldUnit[],
 ): boolean[] {
-  // §4.3.1 — only a unit's centre is impassable, so friendly units may
-  // compenetrate a little; forbid placement only when their centres come
-  // closer than one impassable core (≈60 m).
-  const CORE = 60;
+  // §4.3.1 — "the center of any non-light unit is impassable": units
+  // may compenetrate freely, but no rectangle may cover the centre
+  // POINT (the crossing of the diagonals) of a non-light unit.
+  const nonLight = (u: FieldUnit): boolean => UNIT_DEFS[u.unit].weight !== "light";
   const coreClash = (a: FieldUnit, b: FieldUnit): boolean =>
-    Math.hypot(a.x - b.x, a.y - b.y) < CORE;
+    (nonLight(b) && containsPoint(a, b.x, b.y)) || (nonLight(a) && containsPoint(b, a.x, a.y));
   return moved.map((m) => {
     if (!unitZoneOk(def, state.player, m)) return false;
     for (const other of state.units) {

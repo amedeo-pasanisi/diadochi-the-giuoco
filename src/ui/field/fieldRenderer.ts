@@ -95,12 +95,14 @@ export interface FieldScene {
   ghostUnits?: FieldUnit[];
   /** Screen-space selection box, if dragging one. */
   selectBox?: { x0: number; y0: number; x1: number; y1: number };
+  /** The void around the map — swaps with the turn theme. */
+  backdrop?: string;
 }
 
 export function drawScene(ctx: CanvasRenderingContext2D, scene: FieldScene): void {
   const { cam } = scene;
   ctx.save();
-  ctx.fillStyle = "#0d0a07";
+  ctx.fillStyle = scene.backdrop ?? "#0d0a07";
   ctx.fillRect(0, 0, cam.viewW, cam.viewH);
 
   // map bitmap under camera transform

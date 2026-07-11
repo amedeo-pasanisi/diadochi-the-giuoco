@@ -12,7 +12,9 @@ export function meanderBackground(): string {
 }
 
 export function applyMeander(elmt: HTMLElement): void {
-  elmt.style.backgroundImage = meanderBackground();
+  // the strip's image now comes from CSS (var(--meander-img)) so it can
+  // swap with the turn theme; this hook remains for future ornament work
+  void elmt;
 }
 
 /** A pair of laurel branches meeting under a point, for the title screen. */

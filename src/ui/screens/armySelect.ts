@@ -41,10 +41,13 @@ export interface ArmySelectResult {
  * displayed general is beyond the player's remaining purse, no general
  * is appointed until troops are dismissed or the carousel moves on.
  */
+import { setTurnTheme } from "../turnTheme";
+
 export function armySelectScreen(
   player: PlayerId,
   onDone: (result: ArmySelectResult) => void,
 ): HTMLElement {
+  setTurnTheme(player); // the vase flips for the white player's turn
   let sel = emptySelection();
   let shownGeneral = 0;
   let finished = false;
@@ -92,7 +95,7 @@ export function armySelectScreen(
         "div",
         { class: `unit-card${blocked ? " is-blocked" : ""}` },
         el("div", { class: "unit-card-name" }, def.name),
-        el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def))),
+        el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def, player === 0))),
         el(
           "div",
           { class: "unit-card-foot" },
@@ -156,7 +159,7 @@ export function armySelectScreen(
       const row = el(
         "div",
         { class: "muster-row" },
-        el("div", { class: "muster-art" }, fromHTML(unitArtSVG(def))),
+        el("div", { class: "muster-art" }, fromHTML(unitArtSVG(def, player === 0))),
         el("div", { class: "muster-name" }, def.name),
         el("div", { class: "muster-count" }, `×${count}`),
         el("div", { class: "muster-cost" }, `${unitSpend(id, count)} ᴛ`),

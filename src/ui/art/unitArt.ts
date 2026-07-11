@@ -463,7 +463,19 @@ function stage(inner: string): string {
   </svg>`;
 }
 
-export function unitArtSVG(def: UnitDef): string {
+/**
+ * When the turn theme inverts (Player 1 acting), cards flip from
+ * red-ground/black-figure to black-ground/red-figure: swap the figure
+ * and ground colours throughout the generated SVG.
+ */
+export function unitArtSVG(def: UnitDef, invert = false): string {
+  const svg = buildArt(def);
+  if (!invert) return svg;
+  const TMP = "#SWAP#";
+  return svg.split(FIG).join(TMP).split(CUT).join(FIG).split(TMP).join(CUT);
+}
+
+function buildArt(def: UnitDef): string {
   switch (def.id) {
     case "pezhetairoi":
       return stage(rondacheBack() + legsStride() + torso() + pike() + headPilos());

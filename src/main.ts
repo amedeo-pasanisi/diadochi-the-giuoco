@@ -1,5 +1,6 @@
 import "./ui/theme.css";
 import { clear } from "./ui/dom";
+import { setTurnTheme } from "./ui/turnTheme";
 import { titleScreen } from "./ui/screens/title";
 import { handoffScreen } from "./ui/screens/handoff";
 import { armySelectScreen } from "./ui/screens/armySelect";
@@ -31,6 +32,7 @@ interface Match {
 const app = document.getElementById("app")!;
 
 function showScreen(screen: HTMLElement): void {
+  setTurnTheme(null); // neutral ground; player screens re-flip themselves
   clear(app as HTMLElement);
   app.appendChild(screen);
 }

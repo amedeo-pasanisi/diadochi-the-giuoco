@@ -22,12 +22,8 @@ import {
   smallZone,
   type DeploymentState,
 } from "../../engine/deployment";
-import {
-  containsPoint,
-  GENERAL_RADIUS,
-  corners,
-  type FieldUnit,
-} from "../../engine/field";
+import { containsPoint, GENERAL_RADIUS, type FieldUnit } from "../../engine/field";
+import { fieldBackdrop, setTurnTheme } from "../turnTheme";
 
 /**
  * §3 — the deployment phase.
@@ -49,6 +45,7 @@ export function deployScreen(
   const state = initialDeployment(player, muster);
   const g = GENERAL_DEFS[muster.general!];
   const cam = new Camera(800, 600);
+  setTurnTheme(player); // the vase flips for the white player's turn
   const selected = new Set<number>();
   let generalSelected = false;
   let finished = false;
@@ -174,7 +171,7 @@ export function deployScreen(
       "div",
       { class: "unit-card field-unit-card" },
       el("div", { class: "unit-card-name" }, title),
-      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2))),
+      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2, player === 0))),
       el(
         "div",
         { class: "unit-card-foot" },
@@ -476,13 +473,10 @@ export function deployScreen(
         if (bx1 - bx0 > 6 || by1 - by0 > 6) {
           selected.clear();
           generalSelected = false;
+          // a unit is caught by the box when its centre falls inside
           for (const u of state.units) {
-            const cs = corners(u);
-            const allIn = [cs.tl, cs.tr, cs.bl, cs.br].every(([px, py]) => {
-              const [ssx, ssy] = cam.toScreen(px, py);
-              return ssx >= bx0 && ssx <= bx1 && ssy >= by0 && ssy <= by1;
-            });
-            if (allIn) selected.add(u.uid);
+            const [ssx, ssy] = cam.toScreen(u.x, u.y);
+            if (ssx >= bx0 && ssx <= bx1 && ssy >= by0 && ssy <= by1) selected.add(u.uid);
           }
           if (selected.size > 0) uiClick();
         } else {
@@ -578,6 +572,7 @@ export function deployScreen(
       ghosts,
       lines: glanceRingLines(ggx, ggy),
       selectBox: drag.kind === "box" ? drag : undefined,
+      backdrop: fieldBackdrop(player),
     });
     requestAnimationFrame(frame);
   }

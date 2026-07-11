@@ -14,6 +14,7 @@ import {
   type SceneLine,
 } from "../field/fieldRenderer";
 import { glanceRingLines, pernoTargets, type PernoTarget } from "../field/formation";
+import { fieldBackdrop, setTurnTheme } from "../turnTheme";
 import type { PlayerId, UnitDef } from "../../engine/types";
 import { UNIT_DEFS } from "../../engine/data/units";
 import { GENERAL_DEFS } from "../../engine/data/generals";
@@ -58,6 +59,15 @@ interface OrderBatch {
   cost: number;
 }
 
+type BattleFxLocal = {
+  kind: SceneFx["kind"];
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  at: number;
+};
+
 /** A flavourful reading of how the battle leans, for the acting player. */
 function nikePhrase(bar: number, actor: PlayerId): string {
   const mine = actor === 0 ? bar : -bar; // positive = winning
@@ -73,6 +83,8 @@ function nikePhrase(bar: number, actor: PlayerId): string {
 /**
  * §4.1–§4.2 — the battle screen. Hotseat: Command P1 → Command P2 →
  * Glance P1 → Glance P2 → the Battle Phase plays out before both.
+ * The whole HUD floats over the battlefield; the vase itself flips
+ * colour to declare whose turn it is.
  */
 export function battleScreen(
   state: BattleState,
@@ -101,65 +113,77 @@ export function battleScreen(
   let finished = false;
   const abort = new AbortController();
 
-  /* ---------- DOM ---------- */
+  /* ================= HUD (floating over the field) ================= */
 
-  const canvas = el("canvas", { class: "field-canvas" }) as HTMLCanvasElement;
-  const hint = el("div", { class: "player-sub deploy-hint" }, "");
+  const canvas = el("canvas", { class: "field-canvas battle-canvas" }) as HTMLCanvasElement;
+
+  /* link lines: stat chips → their buttons */
+  const linksSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  linksSvg.setAttribute("class", "hud-links hud-orders");
+
+  /* top-left: the commander */
+  const portraitBox = el("div", { class: "hud-portrait hud-orders shine-target" });
+
+  const cmdChip = el("div", { class: "hud-chip chip-command hud-orders shine-target" });
+  const brillChip = el("div", { class: "hud-chip chip-brill hud-orders shine-target" });
+  const glanceChip = el("div", { class: "hud-chip chip-glance hud-orders shine-target" });
+
+  /* top-center: Nike bar + the three linked action buttons */
+  const nikeText = el("div", { class: "nike-text" }, "");
+  const nikeFill = el("div", { class: "nike-fill" });
+  const nikeTrack = el("div", { class: "nike-track" }, nikeFill, el("div", { class: "nike-tick" }));
+  const phaseCaption = el("div", { class: "hud-phase-caption" }, "");
+  const sendBtn = el("button", { class: "btn-marble hud-action-btn" }, "Send Messengers") as HTMLButtonElement;
+  const hornBtn = el("button", { class: "btn-marble hud-action-btn hud-horn" }, "Blow Horn") as HTMLButtonElement;
+  const shoutBtn = el("button", { class: "btn-marble hud-action-btn" }, "Shout Orders") as HTMLButtonElement;
+  const centerCol = el(
+    "div",
+    { class: "hud-center hud-orders" },
+    el("div", { class: "nike-bar" }, nikeText, nikeTrack),
+    phaseCaption,
+    sendBtn,
+    hornBtn,
+    shoutBtn,
+  );
+
+  /* top-right: turn + timer, Calliope below; Recall/Retreat lower */
+  const turnLabel = el("div", { class: "hud-turn" }, "");
+  const timerSlot = el("div", { class: "hud-timer" });
+  const rememberBtn = el("button", { class: "btn-plain hud-corner-btn" }, "Calliope ↺") as HTMLButtonElement;
+  const topRight = el(
+    "div",
+    { class: "hud-topright hud-orders" },
+    el("div", { class: "hud-turn-row" }, turnLabel, timerSlot),
+    rememberBtn,
+  );
+  const recallBtn = el("button", { class: "btn-marble hud-side-btn hud-recall" }, "Recall Orders") as HTMLButtonElement;
+  const retreatBtn = el("button", { class: "btn-marble hud-side-btn hud-retreat" }, "Sound Retreat") as HTMLButtonElement;
+  recallBtn.classList.add("hud-orders");
+  retreatBtn.classList.add("hud-orders");
+
+  /* bottom-right: the scribe */
+  const logBtn = el("button", { class: "btn-plain hud-scribe-btn" }, "Scribe's Log") as HTMLButtonElement;
+  logBtn.classList.add("hud-orders");
+  const logPanel = el("div", { class: "battle-log" });
+  logPanel.style.display = "none";
+
+  /* the Battle-Phase HUD: both commanders, nothing else */
+  const duelBox = el("div", { class: "hud-duel" });
+
+  const hint = el("div", { class: "hud-hint" }, "");
   const setHint = (t: string): void => {
     hint.textContent = t;
   };
 
-  const nikeText = el("div", { class: "nike-text" }, "");
-  const nikeFill = el("div", { class: "nike-fill" });
-  const nikeBar = el(
-    "div",
-    { class: "nike-bar" },
-    nikeText,
-    el("div", { class: "nike-track" }, nikeFill, el("div", { class: "nike-tick" })),
-  );
-  attachTooltip(nikeBar, () => `<h4>The scales of the battle</h4><div class="tt-role">White strength against black. When it tips fully to ±100% the battle ends; a losing tilt drains your army's courage.</div>`);
-
-  /* commander HUD (top-left) */
-  const portraitBox = el("div", { class: "cmd-portrait" });
-  const cmdRow = el("div", { class: "cmd-stat-row", "data-phase": "command" });
-  const glanceRow = el("div", { class: "cmd-stat-row", "data-phase": "glance" });
-  const brillRow = el("div", { class: "cmd-stat-row" });
-  const statsCol = el("div", { class: "cmd-stats" }, cmdRow, glanceRow, brillRow);
-
-  const sendBtn = el("button", { class: "btn-marble cmd-send" }, "Send Messengers") as HTMLButtonElement;
-  const shoutBtn = el("button", { class: "btn-marble cmd-shout" }, "Shout Orders") as HTMLButtonElement;
-  const hornBtn = el("button", { class: "btn-plain cmd-horn" }, "Blow Horn") as HTMLButtonElement;
-  const recallBtn = el("button", { class: "btn-plain" }, "Recall Orders") as HTMLButtonElement;
-  const retreatBtn = el("button", { class: "btn-plain" }, "Sound Retreat") as HTMLButtonElement;
-  const rememberBtn = el("button", { class: "btn-plain" }, "Calliope ↺") as HTMLButtonElement;
-  const logBtn = el("button", { class: "btn-plain" }, "Scribe's Log") as HTMLButtonElement;
-
-  const btnCol = el(
-    "div",
-    { class: "cmd-buttons" },
-    el("div", { class: "cmd-btn-line" }, sendBtn),
-    el("div", { class: "cmd-btn-line" }, shoutBtn),
-    el("div", { class: "cmd-btn-line" }, hornBtn),
-    el("div", { class: "cmd-btn-line cmd-btn-minor" }, recallBtn, retreatBtn, rememberBtn, logBtn),
-  );
-
-  const commanderHud = el(
-    "div",
-    { class: "commander-hud" },
-    portraitBox,
-    statsCol,
-    el("div", { class: "cmd-linker" }),
-    btnCol,
-  );
-
-  attachTooltip(cmdRow, () => `<h4>Command orders</h4><div class="tt-role">3 + your general's Command each Command Phase. A formation move costs one order per group whose units stay within 200 m. Orders to the general's own unit are free.</div>`);
-  attachTooltip(glanceRow, () => `<h4>Glance orders</h4><div class="tt-role">Bonus orders equal to your general's Glance, spendable only on units within 500 m of him — during the Glance Phase, as the lines close.</div>`);
-  attachTooltip(brillRow, () => `<h4>Brilliancy</h4><div class="tt-role">Blow the horn to spend one point for +3 orders this phase. Spent points never return.</div>`);
+  attachTooltip(nikeTrack, () => `<h4>The scales of the battle</h4><div class="tt-role">White strength against black. When it tips fully to ±100% the battle ends; a losing tilt drains your army's courage.</div>`);
+  attachTooltip(cmdChip, () => `<h4>Command orders</h4><div class="tt-role">3 + your general's Command each Command Phase. A formation move costs one order per group whose units stay within 200 m. The general's own unit obeys for free.</div>`);
+  attachTooltip(glanceChip, () => `<h4>Glance orders</h4><div class="tt-role">Bonus orders equal to your general's Glance, spendable only on units within 500 m of him — during the Glance Phase.</div>`);
+  attachTooltip(brillChip, () => `<h4>Brilliancy</h4><div class="tt-role">Blow the horn to spend one point for +3 orders this phase, in either phase. Spent points never return.</div>`);
   attachTooltip(hornBtn, () => `<h4>Blow the horn</h4><div class="tt-role">Spend one Brilliancy for three bonus orders now. Genius is finite.</div>`);
   attachTooltip(rememberBtn, () => `<h4>Calliope's memory</h4><div class="tt-role">Watch the last Battle Phase play out again.</div>`);
   attachTooltip(logBtn, () => `<h4>The scribe's log</h4><div class="tt-role">The bare arithmetic behind the last clash — every roll the gods made.</div>`);
-
-  const header = el("div", { class: "battle-header" }, nikeBar, commanderHud, hint);
+  attachTooltip(recallBtn, () => `<h4>Recall orders</h4><div class="tt-role">Cancel the selected units' orders and refund them. Ctrl+Z undoes the last order.</div>`);
+  attachTooltip(retreatBtn, () => `<h4>Sound retreat</h4><div class="tt-role">Concede the field. The battle ends at once.</div>`);
 
   /* info panels */
   const cardsRow = el("div", { class: "field-cards" });
@@ -170,30 +194,39 @@ export function battleScreen(
   const enemyPanel = el("div", { class: "tooltip field-panel field-panel-enemy" });
   enemyPanel.style.display = "none";
 
-  const logPanel = el("div", { class: "battle-log" });
-  logPanel.style.display = "none";
-
   const popup = el("div", { class: "papyrus-panel field-popup" });
   popup.style.display = "none";
   const curtain = el("div", { class: "battle-curtain" });
 
   const fieldWrap = el(
     "div",
-    { class: "field-wrap" },
+    { class: "field-wrap battle-field" },
     canvas,
+    linksSvg,
+    portraitBox,
+    cmdChip,
+    brillChip,
+    glanceChip,
+    centerCol,
+    topRight,
+    recallBtn,
+    retreatBtn,
+    logBtn,
+    logPanel,
+    duelBox,
     unitPanel,
     enemyPanel,
-    logPanel,
+    hint,
     popup,
     curtain,
   );
 
-  const root = el("div", { class: "screen" });
+  const root = el("div", { class: "screen battle-screen" });
   const top = el("div", { class: "meander" });
   const bottom = el("div", { class: "meander" });
   applyMeander(top);
   applyMeander(bottom);
-  root.append(top, el("div", { class: "screen-body deploy-body" }, header, fieldWrap), bottom);
+  root.append(top, el("div", { class: "screen-body battle-body" }, fieldWrap), bottom);
 
   /* ---------- helpers ---------- */
 
@@ -246,7 +279,6 @@ export function battleScreen(
     const g = GENERAL_DEFS[gid];
     const bg = generalOf(state, actor);
 
-    // portrait + charisma
     const cond =
       bg.condition === "dead"
         ? '<span class="cmd-cond dead">fallen</span>'
@@ -254,48 +286,171 @@ export function battleScreen(
           ? '<span class="cmd-cond dead">fled · halved</span>'
           : "";
     portraitBox.innerHTML = `
-      <div class="cmd-coin">${coinSVG(g, 92)}</div>
+      <div class="cmd-coin">${coinSVG(g, 108)}</div>
       <div class="cmd-name">${g.name} ${cond}</div>
-      <div class="cmd-charisma"><span class="cmd-lbl">Charisma</span> ${dots(g.charisma, 3, "dot-charisma")}</div>`;
+      <div class="hud-chip chip-charisma"><span class="cmd-lbl">Charisma</span>${dots(g.charisma, 3, "dot-charisma")}</div>`;
 
-    // command row: order pool = 3 + Command (+3 if horn blown this cmd phase)
+    // Command chip: pool = 3 + Command (+3 if horn blown this phase)
     const cmdBase = 3 + g.command;
     const cmdTotal = cmdBase + (phase === "command" && hornBlown ? 3 : 0);
     const cmdLeft = phase === "command" ? remaining() : cmdTotal;
-    cmdRow.innerHTML =
-      `<span class="cmd-lbl">Command · ${cmdBase}</span>` + dots(cmdLeft, cmdTotal, "dot-command");
-    // glance row
+    cmdChip.innerHTML = `<span class="cmd-lbl">Command</span>${dots(cmdLeft, cmdTotal, "dot-command")}`;
+
     const glTotal = g.glance + (phase === "glance" && hornBlown ? 3 : 0);
     const glLeft = phase === "glance" ? remaining() : glTotal;
-    glanceRow.innerHTML =
-      `<span class="cmd-lbl">Glance · ${g.glance}</span>` + dots(glLeft, glTotal, "dot-glance");
-    // brilliancy row
-    brillRow.innerHTML =
-      `<span class="cmd-lbl">Brilliancy</span>` + dots(brilliancyLeft[actor], 3, "dot-brill");
+    glanceChip.innerHTML = `<span class="cmd-lbl">Glance</span>${dots(glLeft, glTotal, "dot-glance")}`;
 
-    cmdRow.classList.toggle("is-active", phase === "command");
-    glanceRow.classList.toggle("is-active", phase === "glance");
+    brillChip.innerHTML = `<span class="cmd-lbl">Brilliancy</span>${dots(brilliancyLeft[actor], 3, "dot-brill")}`;
 
-    // buttons
-    sendBtn.style.display = phase === "command" ? "" : "none";
-    shoutBtn.style.display = phase === "glance" ? "" : "none";
+    // phase highlighting: active chip+button lit, the other greyed;
+    // brilliancy is spendable in both phases, so it never greys
+    cmdChip.classList.toggle("is-active", phase === "command");
+    cmdChip.classList.toggle("is-idle", phase !== "command");
+    glanceChip.classList.toggle("is-active", phase === "glance");
+    glanceChip.classList.toggle("is-idle", phase !== "glance");
+    brillChip.classList.add("is-active");
+
+    sendBtn.disabled = phase !== "command";
+    shoutBtn.disabled = phase !== "glance";
     hornBtn.disabled = hornBlown || brilliancyLeft[actor] <= 0 || bg.condition === "dead";
     rememberBtn.disabled = lastReplay === null;
 
-    // Nike bar (positive favours P1 = white)
+    turnLabel.textContent = `Turn ${state.turn}`;
+    phaseCaption.textContent = phase === "command" ? "— Command Phase —" : "— Glance Phase —";
+
+    // the vase flips for the white player's turn
+    setTurnTheme(actor);
+
     const bar = victoryBar(state);
     nikeFill.style.width = `${Math.max(0, Math.min(100, 50 + bar / 2))}%`;
     nikeText.textContent = nikePhrase(bar, actor);
+
+    requestAnimationFrame(refreshLinks);
+  }
+
+  /** The drawn threads from each stat to its button. */
+  function refreshLinks(): void {
+    const rw = fieldWrap.getBoundingClientRect();
+    if (rw.width === 0) return;
+    linksSvg.setAttribute("viewBox", `0 0 ${rw.width} ${rw.height}`);
+    linksSvg.setAttribute("width", String(rw.width));
+    linksSvg.setAttribute("height", String(rw.height));
+    const pairs: [HTMLElement, HTMLElement, string, boolean][] = [
+      [cmdChip, sendBtn, "#e0b25e", phase === "command"],
+      [brillChip, hornBtn, "#c45cff", !hornBtn.disabled],
+      [glanceChip, shoutBtn, "#7fb2c4", phase === "glance"],
+    ];
+    linksSvg.innerHTML = pairs
+      .map(([a, b, color, active]) => {
+        const ra = a.getBoundingClientRect();
+        const rb = b.getBoundingClientRect();
+        const x1 = ra.right - rw.left + 2;
+        const y1 = ra.top + ra.height / 2 - rw.top;
+        const x2 = rb.left - rw.left - 4;
+        const y2 = rb.top + rb.height / 2 - rw.top;
+        const mx = (x1 + x2) / 2;
+        return `<path d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}"
+          fill="none" stroke="${color}" stroke-width="${active ? 2.5 : 1.4}"
+          stroke-opacity="${active ? 0.9 : 0.28}" ${active ? "" : 'stroke-dasharray="4 6"'} stroke-linecap="round"/>`;
+      })
+      .join("");
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(refreshLinks), {
+    signal: abort.signal,
+  });
+
+  /** Light sweeps across the portrait, then across the active chips. */
+  function runShine(): void {
+    const targets: [HTMLElement, number][] = [
+      [portraitBox, 0],
+      [phase === "command" ? cmdChip : glanceChip, 450],
+      [brillChip, 650],
+    ];
+    for (const [elm, delay] of targets) {
+      elm.classList.remove("shine-run");
+      void elm.offsetWidth; // restart the animation
+      elm.style.setProperty("--shine-delay", `${delay}ms`);
+      elm.classList.add("shine-run");
+    }
+  }
+
+  /* ---------- unit condition markers ---------- */
+
+  interface CondSummary {
+    morale: number;
+    casualties: number;
+    disorder: number;
+    fatigue: number;
+    status: string;
+  }
+
+  function condOf(u: BattleUnit): CondSummary {
+    return {
+      morale: u.morale,
+      casualties: u.casualties,
+      disorder: u.disorder,
+      fatigue: fatigueLevels(u),
+      status: u.status,
+    };
+  }
+
+  function condOfGroup(units: BattleUnit[]): CondSummary {
+    return {
+      morale: Math.min(...units.map((u) => u.morale)),
+      casualties: Math.max(...units.map((u) => u.casualties)),
+      disorder: Math.max(...units.map((u) => u.disorder)),
+      fatigue: Math.max(...units.map((u) => fatigueLevels(u))),
+      status: units.every((u) => u.status === "normal") ? "normal" : "shaken",
+    };
+  }
+
+  /** The marker strip that lives ON the card, under the name band. */
+  function condStripHTML(c: CondSummary): string {
+    const m = Math.max(0, Math.min(3, c.morale));
+    let s = `<span class="cc-morale cc-m${Math.max(1, m)}">${"●".repeat(Math.max(1, m))}${"○".repeat(3 - Math.max(1, m))}</span>`;
+    if (c.casualties > 0) s += `<span class="cc-bad" title="casualties">${"❘".repeat(c.casualties)}</span>`;
+    if (c.disorder > 0) s += `<span class="cc-bad" title="disorder">${"∿".repeat(c.disorder)}</span>`;
+    if (c.fatigue > 0) s += `<span class="cc-bad" title="fatigue">${"╱".repeat(c.fatigue)}</span>`;
+    if (c.status !== "normal") s += `<span class="cc-bad cc-status">${c.status}</span>`;
+    return `<div class="card-cond">${s}</div>`;
+  }
+
+  /** A short line of the live afflictions, placed before the stats. */
+  function conditionLine(c: CondSummary): string {
+    const bits: string[] = [];
+    bits.push(`<span class="cond-morale cond-m${Math.max(1, Math.min(3, c.morale))}">morale ${c.morale}/3</span>`);
+    if (c.casualties > 0) bits.push(`<span class="cond-bad">casualties ${c.casualties}</span>`);
+    if (c.disorder > 0) bits.push(`<span class="cond-bad">disorder ${c.disorder}</span>`);
+    if (c.fatigue > 0) bits.push(`<span class="cond-bad">fatigue ${c.fatigue}</span>`);
+    if (c.status !== "normal") bits.push(`<span class="cond-bad">${c.status}</span>`);
+    return `<div class="cond-line">${bits.join(" · ")}</div>`;
+  }
+
+  /** Insert the condition line just before the stat grid. */
+  function withCond(html: string, c: CondSummary): string {
+    const marker = '<div class="tt-stats"';
+    return html.includes(marker)
+      ? html.replace(marker, conditionLine(c) + marker)
+      : html + conditionLine(c);
   }
 
   /* ---------- info panels ---------- */
 
-  function miniCard(def2: UnitDef, title: string, count: number, foot: string): HTMLElement {
-    return el(
+  function miniCard(
+    def2: UnitDef,
+    title: string,
+    count: number,
+    foot: string,
+    cond?: CondSummary,
+  ): HTMLElement {
+    const card = el(
       "div",
       { class: "unit-card field-unit-card" },
       el("div", { class: "unit-card-name" }, title),
-      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2))),
+    );
+    if (cond) card.append(fromHTML(condStripHTML(cond)));
+    card.append(
+      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2, actor === 0))),
       el(
         "div",
         { class: "unit-card-foot" },
@@ -303,18 +458,7 @@ export function battleScreen(
         count > 1 ? el("span", { class: "unit-count-badge" }, `×${count}`) : el("span", {}, ""),
       ),
     );
-  }
-
-  /** A short line of the live afflictions on a unit. */
-  function conditionLine(u: BattleUnit): string {
-    const bits: string[] = [];
-    bits.push(`<span class="cond-morale cond-m${Math.max(1, Math.min(3, u.morale))}">morale ${u.morale}/3</span>`);
-    if (u.casualties > 0) bits.push(`<span class="cond-bad">casualties ${u.casualties}</span>`);
-    if (u.disorder > 0) bits.push(`<span class="cond-bad">disorder ${u.disorder}</span>`);
-    const fl = fatigueLevels(u);
-    if (fl > 0) bits.push(`<span class="cond-bad">fatigue ${fl}</span>`);
-    if (u.status !== "normal") bits.push(`<span class="cond-bad">${u.status}</span>`);
-    return `<div class="cond-line">${bits.join(" · ")}</div>`;
+    return card;
   }
 
   function updateInfoPanels(): void {
@@ -328,10 +472,11 @@ export function battleScreen(
     if (sel.some((u) => u.uid >= 9000)) {
       const g = GENERAL_DEFS[state.musters[actor].general!];
       const h = UNIT_DEFS.hetairoi;
-      cardsRow.append(miniCard(h, g.name, 1, "the general's guard"));
+      const c = condOf(sel[0]!);
+      cardsRow.append(miniCard(h, g.name, 1, "the general's guard", c));
       infoPanel.innerHTML =
         `<h4>${g.name}</h4><div class="tt-epithet">fights as ${h.name}</div>` +
-        conditionLine(sel[0]!) +
+        conditionLine(c) +
         `<div class="tt-role">${g.role}</div>
          <div class="tt-note">Right-click a friendly unit within 400 m to attach; attached units roll with Advantage (§4.4).</div>`;
       return;
@@ -345,8 +490,10 @@ export function battleScreen(
     }
     const entries = [...groups.values()];
     const singleHTML = (e: { def: UnitDef; units: BattleUnit[] }): string =>
-      unitTooltipHTML(e.def, undefined, { cost: false }) +
-      (e.units.length === 1 ? conditionLine(e.units[0]!) : "");
+      withCond(
+        unitTooltipHTML(e.def, undefined, { cost: false }),
+        e.units.length === 1 ? condOf(e.units[0]!) : condOfGroup(e.units),
+      );
     const defaultHTML =
       entries.length === 1
         ? singleHTML(entries[0]!)
@@ -354,7 +501,13 @@ export function battleScreen(
           entries.map((e) => `<div>${e.def.name} ×${e.units.length}</div>`).join("");
     infoPanel.innerHTML = defaultHTML;
     entries.forEach((e, i) => {
-      const card = miniCard(e.def, e.def.name, e.units.length, e.def.epithet.split("—")[1]?.trim() ?? "");
+      const card = miniCard(
+        e.def,
+        e.def.name,
+        e.units.length,
+        e.def.epithet.split("—")[1]?.trim() ?? "",
+        e.units.length === 1 ? condOf(e.units[0]!) : condOfGroup(e.units),
+      );
       if (entries.length > 1) {
         card.classList.add("is-fanned");
         card.style.zIndex = String(10 + i);
@@ -374,8 +527,7 @@ export function battleScreen(
     enemyPanel.style.display = "block";
     enemyPanel.innerHTML =
       `<div class="enemy-tag">Enemy</div>` +
-      unitTooltipHTML(d, undefined, { cost: false }) +
-      conditionLine(u);
+      withCond(unitTooltipHTML(d, undefined, { cost: false }), condOf(u));
   }
   function hideEnemyPanel(): void {
     enemyPanel.style.display = "none";
@@ -425,6 +577,8 @@ export function battleScreen(
     hornBlown = false;
     previewFrames = null;
     hideEnemyPanel();
+    fieldWrap.classList.remove("mode-playback");
+    setTurnTheme(a); // the ground flips behind the curtain
     const gid = state.musters[a].general!;
     const g = generalOf(state, a);
     const mult = g.condition === "fled" ? 0.5 : 1;
@@ -433,17 +587,19 @@ export function battleScreen(
         ? 0
         : Math.floor((p === "command" ? commandPool(gid) : glancePool(gid)) * mult);
     showCurtain(
-      `Player ${a + 1} — ${p === "command" ? "Command" : "Glance"} Phase`,
-      p === "command"
-        ? "Messengers wait by your tent. Your rival must look away."
-        : "A last look across the field before the lines meet.",
+      `Turn ${state.turn}`,
+      `Player ${a + 1} — ${GENERAL_DEFS[gid].name}`,
+      `${p === "command" ? "Command Phase" : "Glance Phase"}`,
       () => {
         mode = "orders";
         if (p === "glance") previewFrames = previewBattlePhase(state);
         timer?.stop();
         timer = createTimer(p === "command" ? COMMAND_SECONDS : GLANCE_SECONDS, () => endPhase());
+        clear(timerSlot);
+        timerSlot.append(timer.element);
         refreshHud();
         updateInfoPanels();
+        runShine();
       },
     );
   }
@@ -460,11 +616,36 @@ export function battleScreen(
     else runBattlePhase();
   }
 
+  /** During the resolution both commanders watch: portraits left/right. */
+  function showDuelHud(): void {
+    clear(duelBox);
+    for (const p of [0, 1] as PlayerId[]) {
+      const g = GENERAL_DEFS[state.musters[p].general!];
+      const bg = generalOf(state, p);
+      const side = el(
+        "div",
+        { class: `duel-side duel-p${p + 1} shine-target` },
+      );
+      side.innerHTML = `
+        <div class="cmd-coin">${coinSVG(g, 96)}</div>
+        <div class="cmd-name">${g.name}${bg.condition !== "fighting" ? ` <span class="cmd-cond dead">${bg.condition}</span>` : ""}</div>
+        <div class="hud-chip chip-charisma is-active"><span class="cmd-lbl">Charisma</span>${dots(g.charisma, 3, "dot-charisma")}</div>`;
+      duelBox.append(side);
+      window.setTimeout(() => {
+        side.style.setProperty("--shine-delay", `${p * 350}ms`);
+        side.classList.add("shine-run");
+      }, 150);
+    }
+  }
+
   function runBattlePhase(): void {
     mode = "playback";
     timer?.stop();
-    showCurtain("The Battle Phase", "Both commanders may watch the lines move.", () => {
+    setTurnTheme(null); // neutral ground while both watch
+    showCurtain(`Turn ${state.turn}`, "Both commanders watch", "The Battle Phase", () => {
       marchHorn();
+      fieldWrap.classList.add("mode-playback");
+      showDuelHud();
       const frames = resolveBattlePhase(state, rng);
       const fx: BattleFxLocal[] = state.fx.map((f) => ({ ...f }));
       playback = { frames, fx, start: performance.now() };
@@ -480,10 +661,16 @@ export function battleScreen(
     if (!lastReplay) return;
     mode = "playback";
     hidePopup();
+    fieldWrap.classList.add("mode-playback");
+    showDuelHud();
     playback = { frames: lastReplay.frames, fx: lastReplay.fx, start: performance.now() };
     window.setTimeout(() => {
       playback = null;
-      if (!state.finished) refreshHud();
+      if (!state.finished) {
+        mode = "orders";
+        fieldWrap.classList.remove("mode-playback");
+        refreshHud();
+      }
     }, PLAYBACK_MS + 250);
   }
 
@@ -509,6 +696,7 @@ export function battleScreen(
             finished = true;
             abort.abort();
             timer?.stop();
+            setTurnTheme(null);
             onDone(state);
           } else {
             startPhase("command", 0);
@@ -519,17 +707,26 @@ export function battleScreen(
     showPopup(`Turn ${state.turn - 1} — the field speaks`, actions, list);
   }
 
-  function showCurtain(title: string, sub: string, onReady: () => void): void {
+  /** The elegant announcement: turn, player, phase — then a slow fade in. */
+  function showCurtain(turnText: string, who: string, phaseText: string, onReady: () => void): void {
     mode = "curtain";
     clear(curtain);
+    curtain.classList.remove("is-fading");
     const btn = el("button", { class: "btn-marble" }, "Ready");
     btn.addEventListener("click", () => {
-      curtain.style.display = "none";
+      uiClick();
+      marchHorn();
+      curtain.classList.add("is-fading");
+      window.setTimeout(() => {
+        curtain.style.display = "none";
+        curtain.classList.remove("is-fading");
+      }, 950);
       onReady();
     });
     curtain.append(
-      el("div", { class: "handoff-name", style: "font-size:30px" }, title),
-      el("div", { class: "subtitle-line" }, sub),
+      el("div", { class: "subtitle-line" }, turnText),
+      el("div", { class: "handoff-name", style: "font-size:34px" }, who),
+      el("div", { class: "curtain-phase" }, phaseText),
       btn,
     );
     curtain.style.display = "flex";
@@ -854,6 +1051,7 @@ export function battleScreen(
         }
         generalSelected = false;
         if (!e.shiftKey) selected.clear();
+        // a unit is caught by the box when its centre falls inside
         for (const u of myUnits()) {
           if (u.uid >= 9000) continue;
           const [ssx, ssy] = cam.toScreen(u.x, u.y);
@@ -894,15 +1092,19 @@ export function battleScreen(
           cam.reset();
           break;
         case "ArrowUp":
+          e.preventDefault();
           cam.panScreen(0, pan);
           break;
         case "ArrowDown":
+          e.preventDefault();
           cam.panScreen(0, -pan);
           break;
         case "ArrowLeft":
+          e.preventDefault();
           cam.panScreen(pan, 0);
           break;
         case "ArrowRight":
+          e.preventDefault();
           cam.panScreen(-pan, 0);
           break;
         case "w":
@@ -989,6 +1191,7 @@ export function battleScreen(
         finished = true;
         abort.abort();
         timer?.stop();
+        setTurnTheme(null);
         onDone(state);
       },
     );
@@ -1012,11 +1215,11 @@ export function battleScreen(
     logPanel.append(body);
   }
   sendBtn.addEventListener("click", () => {
-    if (mode !== "orders") return;
+    if (mode !== "orders" || sendBtn.disabled) return;
     confirm("The messengers ride to the ranks with your orders. Send them?", "Send", endPhase);
   });
   shoutBtn.addEventListener("click", () => {
-    if (mode !== "orders") return;
+    if (mode !== "orders" || shoutBtn.disabled) return;
     confirm("Shout your final orders across the din. Ready?", "Shout", endPhase);
   });
 
@@ -1119,6 +1322,7 @@ export function battleScreen(
       const firstFit = cam.viewW === 800 && cam.viewH === 600;
       cam.resize(w, h);
       if (firstFit) cam.reset();
+      requestAnimationFrame(refreshLinks);
     }
     const ctx = canvas.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1159,6 +1363,7 @@ export function battleScreen(
       fx,
       ghostUnits,
       selectBox: drag.kind === "box" ? drag : undefined,
+      backdrop: fieldBackdrop(mode === "playback" ? null : actor),
     });
     requestAnimationFrame(frame);
   }
@@ -1167,12 +1372,3 @@ export function battleScreen(
   startPhase("command", 0);
   return root;
 }
-
-type BattleFxLocal = {
-  kind: SceneFx["kind"];
-  x: number;
-  y: number;
-  x2?: number;
-  y2?: number;
-  at: number;
-};
