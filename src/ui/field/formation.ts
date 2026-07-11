@@ -129,7 +129,7 @@ export function glanceRingLines(gx: number, gy: number): SceneLine[] {
       y1: gy + Math.sin(a1) * GLANCE_RADIUS,
       x2: gx + Math.cos(a2) * GLANCE_RADIUS,
       y2: gy + Math.sin(a2) * GLANCE_RADIUS,
-      color: "rgba(196,92,255,0.5)",
+      color: "rgba(127,178,196,0.6)", // the Glance stat's own blue
       width: 8,
     });
   }

@@ -66,6 +66,14 @@ export function marchHorn(): void {
   tone(466, 0.45, 0.035, { type: "sawtooth", glideTo: 370, delay: 0.02 });
 }
 
+/** The war-machine changes gear: a phase clicks into place. */
+export function gearSwitch(): void {
+  tone(150, 0.05, 0.1, { type: "square" });
+  tone(95, 0.08, 0.12, { type: "square", delay: 0.06 });
+  tone(1900, 0.04, 0.05, { delay: 0.12 });
+  tone(260, 0.14, 0.08, { type: "triangle", glideTo: 190, delay: 0.15 });
+}
+
 /** Knucklebones on marble — the contest die (§2.1). */
 export function diceRattle(): void {
   for (const [f, d] of [

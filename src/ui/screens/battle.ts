@@ -4,7 +4,7 @@ import { createTimer, type PhaseTimer } from "../components/timer";
 import { attachTooltip, unitTooltipHTML } from "../components/tooltip";
 import { unitArtSVG } from "../art/unitArt";
 import { coinSVG } from "../art/coinArt";
-import { alalai, dismissThud, marchHorn, uiClick } from "../sound";
+import { alalai, dismissThud, gearSwitch, marchHorn, uiClick } from "../sound";
 import { Camera } from "../field/camera";
 import {
   drawScene,
@@ -14,7 +14,6 @@ import {
   type SceneLine,
 } from "../field/fieldRenderer";
 import { glanceRingLines, pernoTargets, type PernoTarget } from "../field/formation";
-import { fieldBackdrop, setTurnTheme } from "../turnTheme";
 import type { PlayerId, UnitDef } from "../../engine/types";
 import { UNIT_DEFS } from "../../engine/data/units";
 import { GENERAL_DEFS } from "../../engine/data/generals";
@@ -23,7 +22,6 @@ import { containsPoint, type FieldUnit } from "../../engine/field";
 import {
   COMMAND_SECONDS,
   GLANCE_SECONDS,
-  canBeFast,
   commandPool,
   glancePool,
   orderCost,
@@ -117,6 +115,19 @@ export function battleScreen(
 
   const canvas = el("canvas", { class: "field-canvas battle-canvas" }) as HTMLCanvasElement;
 
+  /* one continuous dark backing behind portrait, stats and buttons */
+  const consoleBg = el("div", { class: "hud-console-bg hud-orders" });
+
+  /* the sliding gold frame that marks the active phase — a notched
+     outline around portrait + name + brilliancy + the phase's own stat
+     and buttons, excluding the off-phase row */
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const phaseFrame = document.createElementNS(SVG_NS, "svg");
+  phaseFrame.setAttribute("class", "hud-phase-frame hud-orders");
+  const framePath = document.createElementNS(SVG_NS, "path");
+  framePath.setAttribute("class", "frame-path");
+  phaseFrame.appendChild(framePath);
+
   /* link lines: stat chips → their buttons */
   const linksSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   linksSvg.setAttribute("class", "hud-links hud-orders");
@@ -128,23 +139,16 @@ export function battleScreen(
   const brillChip = el("div", { class: "hud-chip chip-brill hud-orders shine-target" });
   const glanceChip = el("div", { class: "hud-chip chip-glance hud-orders shine-target" });
 
-  /* top-center: Nike bar + the three linked action buttons */
+  /* the Nike bar, topmost and clear of everything */
   const nikeText = el("div", { class: "nike-text" }, "");
   const nikeFill = el("div", { class: "nike-fill" });
   const nikeTrack = el("div", { class: "nike-track" }, nikeFill, el("div", { class: "nike-tick" }));
-  const phaseCaption = el("div", { class: "hud-phase-caption" }, "");
-  const sendBtn = el("button", { class: "btn-marble hud-action-btn" }, "Send Messengers") as HTMLButtonElement;
-  const hornBtn = el("button", { class: "btn-marble hud-action-btn hud-horn" }, "Blow Horn") as HTMLButtonElement;
-  const shoutBtn = el("button", { class: "btn-marble hud-action-btn" }, "Shout Orders") as HTMLButtonElement;
-  const centerCol = el(
-    "div",
-    { class: "hud-center hud-orders" },
-    el("div", { class: "nike-bar" }, nikeText, nikeTrack),
-    phaseCaption,
-    sendBtn,
-    hornBtn,
-    shoutBtn,
-  );
+  const nikeWrap = el("div", { class: "hud-nike hud-orders" }, nikeText, nikeTrack);
+
+  /* action buttons, each at the same height as its stat */
+  const sendBtn = el("button", { class: "btn-marble hud-action-btn hud-btn-send hud-orders" }, "Send Messengers") as HTMLButtonElement;
+  const hornBtn = el("button", { class: "btn-marble hud-action-btn hud-btn-horn hud-horn hud-orders" }, "Blow Horn") as HTMLButtonElement;
+  const shoutBtn = el("button", { class: "btn-marble hud-action-btn hud-btn-shout hud-orders" }, "Shout Orders") as HTMLButtonElement;
 
   /* top-right: turn + timer, Calliope below; Recall/Retreat lower */
   const turnLabel = el("div", { class: "hud-turn" }, "");
@@ -202,12 +206,17 @@ export function battleScreen(
     "div",
     { class: "field-wrap battle-field" },
     canvas,
+    consoleBg,
+    phaseFrame,
     linksSvg,
     portraitBox,
     cmdChip,
     brillChip,
     glanceChip,
-    centerCol,
+    nikeWrap,
+    sendBtn,
+    hornBtn,
+    shoutBtn,
     topRight,
     recallBtn,
     retreatBtn,
@@ -316,16 +325,91 @@ export function battleScreen(
     rememberBtn.disabled = lastReplay === null;
 
     turnLabel.textContent = `Turn ${state.turn}`;
-    phaseCaption.textContent = phase === "command" ? "— Command Phase —" : "— Glance Phase —";
-
-    // the vase flips for the white player's turn
-    setTurnTheme(actor);
 
     const bar = victoryBar(state);
     nikeFill.style.width = `${Math.max(0, Math.min(100, 50 + bar / 2))}%`;
     nikeText.textContent = nikePhrase(bar, actor);
 
-    requestAnimationFrame(refreshLinks);
+    requestAnimationFrame(() => {
+      refreshLinks();
+      refreshFrame();
+    });
+  }
+
+  /**
+   * The gold phase frame: a notched outline around the portrait (with
+   * name and charisma), Brilliancy, and the active phase's stat and
+   * buttons — the off-phase row sits outside the shape. On phase change
+   * the outline morphs to its new silhouette with a gear-switch sound.
+   */
+  function refreshFrame(): void {
+    const rw = fieldWrap.getBoundingClientRect();
+    if (rw.width === 0) return;
+    phaseFrame.setAttribute("viewBox", `0 0 ${rw.width} ${rw.height}`);
+    phaseFrame.setAttribute("width", String(rw.width));
+    phaseFrame.setAttribute("height", String(rw.height));
+
+    const pad = 8;
+    const union = (elts: HTMLElement[]): { x0: number; y0: number; x1: number; y1: number } => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const m of elts) {
+        const r = m.getBoundingClientRect();
+        x0 = Math.min(x0, r.left - rw.left);
+        y0 = Math.min(y0, r.top - rw.top);
+        x1 = Math.max(x1, r.right - rw.left);
+        y1 = Math.max(y1, r.bottom - rw.top);
+      }
+      return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+    };
+
+    const P = union([portraitBox]);
+    const lobe =
+      phase === "command"
+        ? [cmdChip, brillChip, sendBtn, hornBtn]
+        : [brillChip, glanceChip, hornBtn, shoutBtn];
+    const R = union(lobe);
+    // the lobe joins the portrait's right edge with small stubs so the
+    // outline always keeps the same eight corners (morphable path)
+    const rt = Math.max(R.y0, P.y0 + 14);
+    const rb = Math.min(Math.max(R.y1, rt + 28), P.y1 - 14);
+    const pts: [number, number][] = [
+      [P.x0, P.y0],
+      [P.x1, P.y0],
+      [P.x1, rt],
+      [R.x1, rt],
+      [R.x1, rb],
+      [P.x1, rb],
+      [P.x1, P.y1],
+      [P.x0, P.y1],
+    ];
+    framePath.style.setProperty("d", `path('${roundedOutline(pts, 10)}')`);
+  }
+
+  /** Closed path through the corner points with rounded corners. */
+  function roundedOutline(pts: [number, number][], radius: number): string {
+    const n = pts.length;
+    let d = "";
+    for (let i = 0; i < n; i++) {
+      const [ax, ay] = pts[(i + n - 1) % n]!;
+      const [bx, by] = pts[i]!;
+      const [cx, cy] = pts[(i + 1) % n]!;
+      const inLen = Math.hypot(bx - ax, by - ay);
+      const outLen = Math.hypot(cx - bx, cy - by);
+      const r = Math.min(radius, inLen / 2, outLen / 2);
+      const p1x = bx - ((bx - ax) / (inLen || 1)) * r;
+      const p1y = by - ((by - ay) / (inLen || 1)) * r;
+      const p2x = bx + ((cx - bx) / (outLen || 1)) * r;
+      const p2y = by + ((cy - by) / (outLen || 1)) * r;
+      d += `${i === 0 ? "M" : "L"} ${p1x.toFixed(1)} ${p1y.toFixed(1)} Q ${bx.toFixed(1)} ${by.toFixed(1)} ${p2x.toFixed(1)} ${p2y.toFixed(1)} `;
+    }
+    return d + "Z";
+  }
+
+  function pulseFrame(): void {
+    phaseFrame.classList.remove("frame-pulse");
+    void phaseFrame.getBoundingClientRect(); // force reflow to restart the animation
+    phaseFrame.classList.add("frame-pulse");
+    gearSwitch();
   }
 
   /** The drawn threads from each stat to its button. */
@@ -355,9 +439,15 @@ export function battleScreen(
       })
       .join("");
   }
-  window.addEventListener("resize", () => requestAnimationFrame(refreshLinks), {
-    signal: abort.signal,
-  });
+  window.addEventListener(
+    "resize",
+    () =>
+      requestAnimationFrame(() => {
+        refreshLinks();
+        refreshFrame();
+      }),
+    { signal: abort.signal },
+  );
 
   /** Light sweeps across the portrait, then across the active chips. */
   function runShine(): void {
@@ -450,7 +540,7 @@ export function battleScreen(
     );
     if (cond) card.append(fromHTML(condStripHTML(cond)));
     card.append(
-      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2, actor === 0))),
+      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2))),
       el(
         "div",
         { class: "unit-card-foot" },
@@ -578,7 +668,6 @@ export function battleScreen(
     previewFrames = null;
     hideEnemyPanel();
     fieldWrap.classList.remove("mode-playback");
-    setTurnTheme(a); // the ground flips behind the curtain
     const gid = state.musters[a].general!;
     const g = generalOf(state, a);
     const mult = g.condition === "fled" ? 0.5 : 1;
@@ -600,6 +689,8 @@ export function battleScreen(
         refreshHud();
         updateInfoPanels();
         runShine();
+        // the frame slides to the new phase and clicks into gear
+        window.setTimeout(pulseFrame, 220);
       },
     );
   }
@@ -641,7 +732,6 @@ export function battleScreen(
   function runBattlePhase(): void {
     mode = "playback";
     timer?.stop();
-    setTurnTheme(null); // neutral ground while both watch
     showCurtain(`Turn ${state.turn}`, "Both commanders watch", "The Battle Phase", () => {
       marchHorn();
       fieldWrap.classList.add("mode-playback");
@@ -696,7 +786,6 @@ export function battleScreen(
             finished = true;
             abort.abort();
             timer?.stop();
-            setTurnTheme(null);
             onDone(state);
           } else {
             startPhase("command", 0);
@@ -800,34 +889,41 @@ export function battleScreen(
     refreshHud();
   }
 
-  function upgradeLastFast(): void {
-    const b = batches[batches.length - 1];
-    if (!b) return;
-    let changed = false;
-    for (const uid of b.uids) {
-      const u = unitByUid(state, uid);
-      if (u?.order && canBeFast(u.order) && !u.order.fast) {
-        u.order.fast = true;
-        changed = true;
-      }
-    }
-    if (changed) {
-      marchHorn();
-      setHint("Fast pace! They will arrive sooner — and wearier.");
-      if (phase === "glance") previewFrames = previewBattlePhase(state);
-    }
-  }
-
   /* ---------- input ---------- */
 
+  type TargetMod = "attack" | "face" | "skirmish" | "avoid";
   type Drag =
     | { kind: "none" }
     | { kind: "box"; x0: number; y0: number; x1: number; y1: number }
-    | { kind: "place"; downW: [number, number]; curW: [number, number]; shift: boolean }
+    | {
+        kind: "place";
+        downW: [number, number];
+        curW: [number, number];
+        shift: boolean;
+        fast: boolean;
+      }
+    | {
+        kind: "target";
+        x0: number;
+        y0: number;
+        x1: number;
+        y1: number;
+        firstUid: number;
+        mod: TargetMod;
+        shift: boolean;
+        fast: boolean;
+      }
     | { kind: "pan"; lastX: number; lastY: number };
   let drag: Drag = { kind: "none" };
   let lastRight = { t: 0, x: 0, y: 0 };
   const keysDown = new Set<string>();
+
+  function currentMod(): TargetMod {
+    if (keysDown.has("f")) return "face";
+    if (keysDown.has("s")) return "skirmish";
+    if (keysDown.has("a")) return "avoid";
+    return "attack";
+  }
 
   const sig = { signal: abort.signal };
   canvas.addEventListener("contextmenu", (e) => e.preventDefault(), sig);
@@ -901,12 +997,10 @@ export function battleScreen(
 
       if (e.button === 2) {
         const now = performance.now();
+        // §4.1.2 — a double right-click means fast pace; the second press
+        // can be held and dragged like any order
         const dbl = now - lastRight.t < 400 && Math.hypot(sx - lastRight.x, sy - lastRight.y) < 24;
         lastRight = { t: now, x: sx, y: sy };
-        if (dbl) {
-          upgradeLastFast();
-          return;
-        }
         const sel = selectedUnits();
         const enemy = unitAtPoint(enemyUnits(), wx, wy);
 
@@ -940,11 +1034,23 @@ export function battleScreen(
           return;
         }
         if (enemy) {
-          issueEnemyOrder(sel, enemy, e.shiftKey);
+          // §4.1.1 — drag a box to mark several enemy units at once;
+          // a plain click resolves to just this one on release
+          drag = {
+            kind: "target",
+            x0: sx,
+            y0: sy,
+            x1: sx,
+            y1: sy,
+            firstUid: enemy.uid,
+            mod: currentMod(),
+            shift: e.shiftKey,
+            fast: dbl,
+          };
           return;
         }
         // march to ground with the perno drag
-        drag = { kind: "place", downW: [wx, wy], curW: [wx, wy], shift: e.shiftKey };
+        drag = { kind: "place", downW: [wx, wy], curW: [wx, wy], shift: e.shiftKey, fast: dbl };
         ghostTargets = pernoTargets(sel, drag.downW, drag.curW, drag.shift);
       }
     },
@@ -956,16 +1062,30 @@ export function battleScreen(
     return g.unitUid >= 0 ? unitByUid(state, g.unitUid) : undefined;
   }
 
-  function issueEnemyOrder(sel: BattleUnit[], enemy: BattleUnit, shift: boolean): void {
-    if (keysDown.has("f")) {
-      issueOrders(sel, () => ({ type: "face", targets: [enemy.uid], fast: false }));
-    } else if (keysDown.has("s")) {
-      issueOrders(sel, () => ({ type: "skirmish", targets: [enemy.uid], fast: false }));
-    } else if (keysDown.has("a")) {
-      issueOrders(sel, () => ({ type: "avoid", targets: [enemy.uid], fast: false }));
-    } else {
-      issueOrders(sel, () => ({ type: "attack", targets: [enemy.uid], fast: false, secondary: shift }));
+  /** Attack/face/skirmish/avoid against one or many enemies (§4.1.1). */
+  function issueEnemyOrder(
+    sel: BattleUnit[],
+    targets: number[],
+    mod: TargetMod,
+    shift: boolean,
+    fast: boolean,
+  ): void {
+    if (targets.length === 0) return;
+    switch (mod) {
+      case "face":
+        issueOrders(sel, () => ({ type: "face", targets, fast }));
+        break;
+      case "skirmish":
+        issueOrders(sel, () => ({ type: "skirmish", targets, fast }));
+        break;
+      case "avoid":
+        issueOrders(sel, () => ({ type: "avoid", targets, fast }));
+        break;
+      case "attack":
+        issueOrders(sel, () => ({ type: "attack", targets, fast, secondary: shift }));
+        break;
     }
+    if (fast) setHint("Fast pace! They will arrive sooner — and wearier.");
   }
 
   function selectGeneral(): void {
@@ -1009,7 +1129,7 @@ export function battleScreen(
         cam.panScreen(sx - drag.lastX, sy - drag.lastY);
         drag.lastX = sx;
         drag.lastY = sy;
-      } else if (drag.kind === "box") {
+      } else if (drag.kind === "box" || drag.kind === "target") {
         drag.x1 = sx;
         drag.y1 = sy;
       } else if (drag.kind === "place") {
@@ -1026,14 +1146,38 @@ export function battleScreen(
     (e) => {
       if (drag.kind === "place" && e.button === 2) {
         const targets = ghostTargets;
+        const fast = drag.fast;
         ghostTargets = new Map();
         drag = { kind: "none" };
         if (targets.size > 0) {
           issueOrders(selectedUnits(), (u) => {
             const t = targets.get(u.uid);
-            return t ? { type: "march", dest: t, fast: false } : null;
+            return t ? { type: "march", dest: t, fast } : null;
           });
+          if (fast) setHint("Fast pace! They will arrive sooner — and wearier.");
         }
+        return;
+      }
+      if (drag.kind === "target" && e.button === 2) {
+        const b = drag;
+        drag = { kind: "none" };
+        const bx0 = Math.min(b.x0, b.x1);
+        const bx1 = Math.max(b.x0, b.x1);
+        const by0 = Math.min(b.y0, b.y1);
+        const by1 = Math.max(b.y0, b.y1);
+        let targets: number[];
+        if (bx1 - bx0 < 8 && by1 - by0 < 8) {
+          targets = [b.firstUid];
+        } else {
+          targets = enemyUnits()
+            .filter((u) => {
+              const [ssx, ssy] = cam.toScreen(u.x, u.y);
+              return ssx >= bx0 && ssx <= bx1 && ssy >= by0 && ssy <= by1;
+            })
+            .map((u) => u.uid);
+          if (targets.length === 0) targets = [b.firstUid];
+        }
+        issueEnemyOrder(selectedUnits(), targets, b.mod, b.shift, b.fast);
         return;
       }
       if (drag.kind === "box" && e.button === 0) {
@@ -1191,7 +1335,6 @@ export function battleScreen(
         finished = true;
         abort.abort();
         timer?.stop();
-        setTurnTheme(null);
         onDone(state);
       },
     );
@@ -1322,7 +1465,10 @@ export function battleScreen(
       const firstFit = cam.viewW === 800 && cam.viewH === 600;
       cam.resize(w, h);
       if (firstFit) cam.reset();
-      requestAnimationFrame(refreshLinks);
+      requestAnimationFrame(() => {
+        refreshLinks();
+        refreshFrame();
+      });
     }
     const ctx = canvas.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1362,8 +1508,7 @@ export function battleScreen(
       lines: proj.lines,
       fx,
       ghostUnits,
-      selectBox: drag.kind === "box" ? drag : undefined,
-      backdrop: fieldBackdrop(mode === "playback" ? null : actor),
+      selectBox: drag.kind === "box" || drag.kind === "target" ? drag : undefined,
     });
     requestAnimationFrame(frame);
   }

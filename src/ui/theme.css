@@ -30,28 +30,6 @@
   --meander-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cpath d='M1 21 V1 H21 V15 H9 V9 H15' fill='none' stroke='%23c06a34' stroke-width='2.6'/%3E%3C/svg%3E");
 }
 
-/*
- * The turn inversion: while Player 1 (white) acts, the vase flips â€”
- * red-figure becomes black-figure. Every reddish surface goes black,
- * every black surface goes terracotta, across ALL screens including
- * the meander frames. Marble, papyrus and gold are neither red nor
- * black, so they hold steady.
- */
-body.theme-inverted {
-  --ink: #96461f;
-  --ink-soft: #8a3f1c;
-  --ink-line: #a85526;
-  --terra: #16100a;
-  --terra-bright: #241a12;
-  --terra-deep: #33241a;
-  --terra-dark: #0d0a07;
-  --card-red: #16100a;
-  --card-red-deep: #241a12;
-  --figure-black: #b45f2c;
-
-  --meander-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cpath d='M1 21 V1 H21 V15 H9 V9 H15' fill='none' stroke='%2316100a' stroke-width='2.6'/%3E%3C/svg%3E");
-}
-
 * {
   margin: 0;
   padding: 0;
@@ -69,7 +47,6 @@ body {
   font-family: var(--font-body);
   overflow: hidden;
   user-select: none;
-  transition: background 800ms ease, color 800ms ease;
 }
 
 #app {
@@ -1136,21 +1113,69 @@ body {
   z-index: 6;
 }
 
+/* ---- the single continuous backing for the whole command console ---- */
+.hud-console-bg {
+  position: absolute;
+  top: 40px;
+  left: 8px;
+  width: calc(50% + 118px);
+  height: 200px;
+  background: rgba(13, 10, 7, 0.66);
+  border: 1px solid rgba(224, 178, 94, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+/* ---- the notched gold frame marking the active phase ---- */
+.hud-phase-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 6;
+  overflow: visible;
+}
+
+.frame-path {
+  fill: rgba(224, 178, 94, 0.045);
+  stroke: var(--gold);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 9px rgba(224, 178, 94, 0.25));
+  transition: d 700ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hud-phase-frame.frame-pulse .frame-path {
+  animation: framepath-glow 1.15s ease;
+}
+
+@keyframes framepath-glow {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(224, 178, 94, 0.15));
+    stroke-width: 2;
+  }
+  35% {
+    filter: drop-shadow(0 0 26px rgba(224, 178, 94, 0.95));
+    stroke-width: 3.2;
+  }
+  100% {
+    filter: drop-shadow(0 0 9px rgba(224, 178, 94, 0.25));
+    stroke-width: 2;
+  }
+}
+
 /* ---- top-left: the commander ---- */
 .hud-portrait {
   position: absolute;
-  top: 10px;
-  left: 12px;
+  top: 48px;
+  left: 16px;
   z-index: 7;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  padding: 10px 14px 9px;
-  background: rgba(13, 10, 7, 0.72);
-  border: 1px solid rgba(224, 178, 94, 0.28);
-  border-radius: 8px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  padding: 8px 12px 7px;
 }
 
 .cmd-coin svg {
@@ -1173,14 +1198,13 @@ body {
   letter-spacing: 0;
 }
 
-/* ---- the stat chips arcing around the portrait ---- */
+/* ---- the stat chips arcing along the portrait's curve ---- */
 .hud-chip {
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 6px 12px;
-  background: rgba(13, 10, 7, 0.72);
-  border: 1px solid rgba(224, 178, 94, 0.24);
+  border: 1px solid rgba(224, 178, 94, 0.28);
   border-radius: 16px;
   z-index: 7;
   transition: opacity 300ms, border-color 300ms, box-shadow 300ms;
@@ -1188,20 +1212,20 @@ body {
 
 .chip-command {
   position: absolute;
-  top: 12px;
-  left: 176px;
+  top: 54px;
+  left: 184px;
 }
 
 .chip-brill {
   position: absolute;
-  top: 66px;
-  left: 196px;
+  top: 108px;
+  left: 204px;
 }
 
 .chip-glance {
   position: absolute;
-  top: 120px;
-  left: 176px;
+  top: 162px;
+  left: 184px;
 }
 
 .chip-charisma {
@@ -1226,11 +1250,6 @@ body {
   letter-spacing: 0.14em;
   font-size: 10.5px;
   color: var(--terra-bright);
-}
-
-body.theme-inverted .hud-chip .cmd-lbl,
-body.theme-inverted .hud-portrait .cmd-lbl {
-  color: #d98a4c;
 }
 
 .dot {
@@ -1260,24 +1279,17 @@ body.theme-inverted .hud-portrait .cmd-lbl {
   background: #d98a4c;
 }
 
-/* ---- top-center: Nike + the action stack ---- */
-.hud-center {
+/* ---- the Nike bar: topmost, above everything else ---- */
+.hud-nike {
   position: absolute;
-  top: 8px;
+  top: 4px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 7;
+  z-index: 8;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-}
-
-.nike-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .nike-text {
@@ -1319,20 +1331,28 @@ body.theme-inverted .hud-portrait .cmd-lbl {
   background: var(--terra-bright);
 }
 
-.hud-phase-caption {
-  font-family: var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.26em;
-  font-size: 11px;
-  color: var(--gold);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-}
-
+/* action buttons: each at the exact height of its stat chip */
 .hud-action-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
   font-size: 12px;
   padding: 7px 0;
   width: 210px;
   letter-spacing: 0.14em;
+}
+
+.hud-btn-send {
+  top: 50px;
+}
+
+.hud-btn-horn {
+  top: 104px;
+}
+
+.hud-btn-shout {
+  top: 158px;
 }
 
 .hud-action-btn:disabled {
@@ -1392,6 +1412,11 @@ body.theme-inverted .hud-portrait .cmd-lbl {
 
 .hud-recall {
   top: 118px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.3), transparent 45%),
+    linear-gradient(180deg, #ecd9a8, #d4b060 70%, #b08c3c);
+  border: 1px solid #8a6a2c;
+  color: #3a2a08;
 }
 
 .hud-retreat {

@@ -23,7 +23,6 @@ import {
   type DeploymentState,
 } from "../../engine/deployment";
 import { containsPoint, GENERAL_RADIUS, type FieldUnit } from "../../engine/field";
-import { fieldBackdrop, setTurnTheme } from "../turnTheme";
 
 /**
  * §3 — the deployment phase.
@@ -45,7 +44,6 @@ export function deployScreen(
   const state = initialDeployment(player, muster);
   const g = GENERAL_DEFS[muster.general!];
   const cam = new Camera(800, 600);
-  setTurnTheme(player); // the vase flips for the white player's turn
   const selected = new Set<number>();
   let generalSelected = false;
   let finished = false;
@@ -171,7 +169,7 @@ export function deployScreen(
       "div",
       { class: "unit-card field-unit-card" },
       el("div", { class: "unit-card-name" }, title),
-      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2, player === 0))),
+      el("div", { class: "unit-card-art" }, fromHTML(unitArtSVG(def2))),
       el(
         "div",
         { class: "unit-card-foot" },
@@ -572,7 +570,6 @@ export function deployScreen(
       ghosts,
       lines: glanceRingLines(ggx, ggy),
       selectBox: drag.kind === "box" ? drag : undefined,
-      backdrop: fieldBackdrop(player),
     });
     requestAnimationFrame(frame);
   }

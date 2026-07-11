@@ -155,13 +155,18 @@ function moveAll(s: BattleState, rng: Rng, frames: Keyframes): void {
           break;
         }
         const step = Math.min(STEP, dist);
-        const nx = p.u.x + (dx / dist) * step;
-        const ny = p.u.y + (dy / dist) * step;
-        const cost = step * terrainCostMult(s, p.u, nx, ny, p);
-        if (cost > left + 1e-6) {
+        const probeX = p.u.x + (dx / dist) * step;
+        const probeY = p.u.y + (dy / dist) * step;
+        const mult = terrainCostMult(s, p.u, probeX, probeY, p);
+        // spend what the tick affords: rough ground shortens the stride
+        // instead of freezing the unit at the terrain's edge
+        const stepLen = Math.min(step, left / mult);
+        if (stepLen < 1) {
           left = 0;
           break;
         }
+        const nx = p.u.x + (dx / dist) * stepLen;
+        const ny = p.u.y + (dy / dist) * stepLen;
         // enemies are impassable (§4.3.1): stop at contact
         const blocked = enemyContactAt(s, p.u, nx, ny);
         if (blocked) {
@@ -169,10 +174,10 @@ function moveAll(s: BattleState, rng: Rng, frames: Keyframes): void {
           left = 0;
           break;
         }
-        applyStepEffects(s, p, nx, ny, step);
+        applyStepEffects(s, p, nx, ny, stepLen);
         p.u.x = nx;
         p.u.y = ny;
-        left -= cost;
+        left -= stepLen * mult;
       }
     }
     for (const u of liveUnits(s)) {

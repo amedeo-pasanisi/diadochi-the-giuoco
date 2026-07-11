@@ -376,12 +376,15 @@ function drawGhost(ctx: CanvasRenderingContext2D, g: GhostUnit): void {
     ctx.fill();
     ctx.stroke();
   }
-  // front tick so the ghost's facing is readable
-  const [fx, fy] = facing(g);
-  ctx.beginPath();
-  ctx.moveTo(g.x + fx * 50, g.y + fy * 50);
-  ctx.lineTo(g.x + fx * 90, g.y + fy * 90);
-  ctx.stroke();
+  // front tick so the ghost's facing is readable — but the general's
+  // circle has no front (§3.4), so it gets none
+  if (!g.circle) {
+    const [fx, fy] = facing(g);
+    ctx.beginPath();
+    ctx.moveTo(g.x + fx * 50, g.y + fy * 50);
+    ctx.lineTo(g.x + fx * 90, g.y + fy * 90);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -493,6 +496,14 @@ function drawGeneral(
   }
 
   ctx.save();
+  // a player-coloured halo behind everything: white for P1, black for
+  // P2, so the two generals never blur together or into the map
+  const playerColor = g.player === 0 ? "rgba(242,236,222,0.95)" : "rgba(16,10,6,0.95)";
+  ctx.fillStyle = playerColor;
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 22, 0, Math.PI * 2);
+  ctx.fill();
+
   // the gold command ring marks him out from any camp or unit marking
   ctx.strokeStyle = selected ? SELECT : GOLD;
   ctx.lineWidth = selected ? 10 : 7;
@@ -501,7 +512,7 @@ function drawGeneral(
   ctx.stroke();
 
   ctx.fillStyle = GOLD;
-  ctx.strokeStyle = g.player === 0 ? P1_EDGE : "#16100a";
+  ctx.strokeStyle = g.player === 0 ? "#3a3128" : "#f2ecde";
   ctx.lineWidth = 4;
   const pts = argeadStarPoints(x, y, radius).split(" ");
   ctx.beginPath();
