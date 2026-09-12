@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:art": "node scripts/artprobe.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1",
