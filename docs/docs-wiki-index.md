@@ -29,6 +29,17 @@ This folder collects the project-level documentation for the prototype. The goal
 
 This set of documents is intentionally focused on the current prototype. It does not replace the design brief in [prompt-della-morte-v2.md](../prompt-della-morte-v2.md), but it complements it by describing how the actual codebase is structured and how the major systems fit together.
 
+## Deployment strategy for the current prototype
+
+The current deployment target is GitHub Pages. This is the most practical first public hosting solution for a static browser prototype and is aligned with the project’s short-term goal of sharing the game with personal testers without requiring them to run a local build.
+
+This approach is intentionally temporary and lightweight:
+
+- it keeps the prototype free and easy to access
+- it makes it possible to share a live link with non-technical friends and testers
+- it avoids premature investment in a backend or auth layer
+- it preserves the ability to move later to a more complete hosted architecture when login, persistence, or multiplayer require it
+
 ## Project constraint: engine portability for a future Unity/C# version
 
 This project is not being designed as a web-only codebase with no future. The core gameplay logic is intentionally written to remain portable and translatable to a Unity/C# version.
@@ -50,13 +61,14 @@ This requirement applies to every new change and should be treated as a design p
 
 Goal: make the game accessible online in its current form, without requiring users to build or run it locally. This is the most important milestone because it allows testers and non-technical friends to use the prototype simply by opening a link.
 
+For the current prototype phase, the preferred hosting approach is GitHub Pages. This is the simplest path to a free, low-friction public deployment while the game is still a static web prototype. A more complex backend should be introduced only when user identity, persistent saved games, or authenticated multiplayer become required.
+
 Planned work:
 
-- identify a frontend hosting platform compatible with a Vite static app
-- choose a managed database or storage service for user and match data
-- define which data should be persisted online: profiles, saved armies, match history, settings, and future session state
-- configure a simple deployment pipeline from the repository
+- deploy the browser game on GitHub Pages as the first public test target
 - validate the current hotseat game in the hosted environment and fix any browser-specific assumptions
+- keep the initial deployment simple and free while the project is still in early validation
+- postpone database and backend design until the project clearly needs persistence or login
 
 ### Phase 2 — user authentication and account identity
 

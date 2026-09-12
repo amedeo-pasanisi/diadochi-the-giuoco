@@ -102,11 +102,29 @@ These are lightweight checks suitable for early-stage prototyping and smoke vali
 
 The technical reference is separated from the quick-start overview so it stays readable for both non-technical readers and developers.
 
-- [docs/README.md](docs/README.md) — technical index
+- [docs/docs-wiki-index.md](docs/docs-wiki-index.md) — technical index and project wiki entry point
 - [docs/architecture.md](docs/architecture.md) — architecture, stack, and implementation choices
 - [docs/data-models.md](docs/data-models.md) — data structures and core game objects
 - [docs/design.md](docs/design.md) — gameplay vision and design intent
 - [docs/ui-reference.md](docs/ui-reference.md) — UI flow and screen structure
+
+---
+
+## GitHub Pages deployment (current V1)
+
+For the current prototype phase, the preferred public deployment target is GitHub Pages. This is a fast, free, and low-friction way to share the browser game with friends and testers without requiring a local build or a backend.
+
+Recommended flow:
+
+1. Make sure the app builds successfully with `npm run build`.
+2. Push the repository to GitHub.
+3. Open the repository settings and enable GitHub Pages.
+4. Select the deployment source appropriate for the repo (GitHub Actions or the static site output folder, depending on your preferred setup).
+5. Publish the generated `dist` output and use the resulting URL to share the game.
+
+This is the correct short-term hosting choice for a static web prototype. It keeps the game easy to test while avoiding unnecessary backend complexity.
+
+When the project later needs login, saved progress, or server-side state, the architecture can evolve toward a proper backend and database stack. For now, GitHub Pages is the right first public deployment target.
 
 ---
 
@@ -116,13 +134,14 @@ The technical reference is separated from the quick-start overview so it stays r
 
 The immediate goal is to make the game available online in its current state, without requiring contributors or test users to build it locally. This is the most important milestone because it allows the prototype to be shared with non-technical friends and testers through a public link.
 
+For the current prototype phase, the preferred deployment target is GitHub Pages as a low-friction static hosting solution. Once the project needs user accounts, saved progression, or authenticated multiplayer features, a more complete backend stack can be introduced later.
+
 Planned work:
 
-- choose a frontend hosting platform for the browser game
-- choose a managed database or storage backend for persistent user data
-- define which data must be stored online: account profile, saved armies, match history, settings, or future progression
-- configure a simple CI/CD deployment pipeline from the repository
+- deploy the browser game on GitHub Pages as the first public test target
 - validate the current hotseat prototype in a hosted environment and adapt any browser assumptions
+- keep the static hosting model simple and free while the game is in early validation
+- reserve a backend and database layer for later, only when persistence or login become necessary
 
 ### 2. User login and account identity
 
